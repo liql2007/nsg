@@ -10,6 +10,10 @@
 #include "efanna2e/parameters.h"
 
 namespace efanna2e {
+
+const double kPi = 3.14159265358979323846264;
+const float cosinThreshold = std::cos(60.0 / 180 * kPi);
+
 #define _CONTROL_NUM 100
 IndexNSG::IndexNSG(const size_t dimension, const size_t n, Metric m,
                    Index *initializer)
@@ -22,7 +26,9 @@ void IndexNSG::Save(const char *filename) {
   assert(final_graph_.size() == nd_);
 
   out.write((char *)&width, sizeof(unsigned));
-  out.write((char *)&ep_, sizeof(unsigned));
+  unsigned epNum = eps_.size();
+  out.write((char *)&epNum, sizeof(unsigned));
+  out.write((char *)eps_.data(), epNum * sizeof(unsigned));
   for (unsigned i = 0; i < nd_; i++) {
     unsigned GK = (unsigned)final_graph_[i].size();
     out.write((char *)&GK, sizeof(unsigned));
@@ -34,9 +40,25 @@ void IndexNSG::Save(const char *filename) {
 void IndexNSG::Load(const char *filename) {
   std::ifstream in(filename, std::ios::binary);
   in.read((char *)&width, sizeof(unsigned));
-  in.read((char *)&ep_, sizeof(unsigned));
+  unsigned epNum = 0;
+  in.read((char *)&epNum, sizeof(unsigned));
+  assert(epNum > 0);
+  eps_.resize(epNum);
+  in.read((char *)eps_.data(), epNum * sizeof(unsigned));
+//  if (eps_.size() < 20 && nd_ > 1000) {
+//    std::mt19937 rng(rand());
+//    while (eps_.size() < 20) {
+//      auto id = rng() % nd_;
+//      if (std::find(eps_.begin(), eps_.end(), id) == eps_.end()) {
+//        eps_.push_back(id);
+//      }
+//    }
+//  }
+
+  // eps_.resize(1);
+
   // width=100;
-  unsigned cc = 0;
+  double cc = 0;
   while (!in.eof()) {
     unsigned k;
     in.read((char *)&k, sizeof(unsigned));
@@ -46,8 +68,9 @@ void IndexNSG::Load(const char *filename) {
     in.read((char *)tmp.data(), k * sizeof(unsigned));
     final_graph_.push_back(tmp);
   }
-  cc /= nd_;
-  // std::cout<<cc<<std::endl;
+  avgDegree_ = cc / nd_;
+  std::cerr << "Average Degree = " << avgDegree_
+            << ",  Width:" << width << std::endl;
 }
 void IndexNSG::Load_nn_graph(const char *filename) {
   std::ifstream in(filename, std::ios::binary);
@@ -74,40 +97,48 @@ void IndexNSG::Load_nn_graph(const char *filename) {
 void IndexNSG::get_neighbors(const float *query, const Parameters &parameter,
                              std::vector<Neighbor> &retset,
                              std::vector<Neighbor> &fullset) {
+  boost::dynamic_bitset<> flags{nd_, 0};
+  return get_neighbors(query, parameter, flags, retset, fullset);
+}
+
+void IndexNSG::get_neighbors(const float *query, const Parameters &parameter,
+                             boost::dynamic_bitset<> &flags,
+                             std::vector<Neighbor> &retset,
+                             std::vector<Neighbor> &fullset) {
   unsigned L = parameter.Get<unsigned>("L");
 
-  retset.resize(L + 1);
-  std::vector<unsigned> init_ids(L);
+  retset.reserve(L + 1);
+  std::vector<unsigned> init_ids(eps_.size());
   // initializer_->Search(query, nullptr, L, parameter, init_ids.data());
 
-  boost::dynamic_bitset<> flags{nd_, 0};
-  L = 0;
-  for (unsigned i = 0; i < init_ids.size() && i < final_graph_[ep_].size(); i++) {
-    init_ids[i] = final_graph_[ep_][i];
+  for (unsigned i = 0; i < init_ids.size() ; i++) {
+    init_ids[i] = eps_[i];
     flags[init_ids[i]] = true;
-    L++;
   }
-  while (L < init_ids.size()) {
+  while (init_ids.size() < L) {
     unsigned id = rand() % nd_;
     if (flags[id]) continue;
-    init_ids[L] = id;
-    L++;
+    init_ids.push_back(id);
     flags[id] = true;
   }
 
-  L = 0;
+  unsigned poolSize = 0;
   for (unsigned i = 0; i < init_ids.size(); i++) {
     unsigned id = init_ids[i];
     if (id >= nd_) continue;
     // std::cout<<id<<std::endl;
     float dist = distance_->compare(data_ + dimension_ * (size_t)id, query,
                                     (unsigned)dimension_);
-    retset[i] = Neighbor(id, dist, true);
+    retset.emplace_back(id, dist, true);
+    fullset.push_back(retset[i]);
     // flags[id] = 1;
-    L++;
+    poolSize++;
   }
 
-  std::sort(retset.begin(), retset.begin() + L);
+  std::sort(retset.begin(), retset.begin() + poolSize);
+  if (poolSize > L) {
+    poolSize = L;
+  }
   int k = 0;
   while (k < (int)L) {
     int nk = L;
@@ -125,10 +156,10 @@ void IndexNSG::get_neighbors(const float *query, const Parameters &parameter,
                                         (unsigned)dimension_);
         Neighbor nn(id, dist, true);
         fullset.push_back(nn);
-        if (dist >= retset[L - 1].distance) continue;
-        int r = InsertIntoPool(retset.data(), L, nn);
+        if (poolSize == L && dist >= retset[L - 1].distance) continue;
+        int r = InsertIntoPool(retset.data(), poolSize, nn);
 
-        if (L + 1 < retset.size()) ++L;
+        if (poolSize < L) ++poolSize;
         if (r < nk) nk = r;
       }
     }
@@ -139,72 +170,21 @@ void IndexNSG::get_neighbors(const float *query, const Parameters &parameter,
   }
 }
 
-void IndexNSG::get_neighbors(const float *query, const Parameters &parameter,
+void IndexNSG::get_neighbors(const unsigned q, const Parameters &parameter,
                              boost::dynamic_bitset<> &flags,
-                             std::vector<Neighbor> &retset,
-                             std::vector<Neighbor> &fullset) {
-  unsigned L = parameter.Get<unsigned>("L");
-
-  retset.resize(L + 1);
-  std::vector<unsigned> init_ids(L);
-  // initializer_->Search(query, nullptr, L, parameter, init_ids.data());
-
-  L = 0;
-  for (unsigned i = 0; i < init_ids.size() && i < final_graph_[ep_].size(); i++) {
-    init_ids[i] = final_graph_[ep_][i];
-    flags[init_ids[i]] = true;
-    L++;
-  }
-  while (L < init_ids.size()) {
-    unsigned id = rand() % nd_;
-    if (flags[id]) continue;
-    init_ids[L] = id;
-    L++;
-    flags[id] = true;
-  }
-
-  L = 0;
-  for (unsigned i = 0; i < init_ids.size(); i++) {
-    unsigned id = init_ids[i];
-    if (id >= nd_) continue;
-    // std::cout<<id<<std::endl;
-    float dist = distance_->compare(data_ + dimension_ * (size_t)id, query,
-                                    (unsigned)dimension_);
-    retset[i] = Neighbor(id, dist, true);
-    fullset.push_back(retset[i]);
-    // flags[id] = 1;
-    L++;
-  }
-
-  std::sort(retset.begin(), retset.begin() + L);
-  int k = 0;
-  while (k < (int)L) {
-    int nk = L;
-
-    if (retset[k].flag) {
-      retset[k].flag = false;
-      unsigned n = retset[k].id;
-
-      for (unsigned m = 0; m < final_graph_[n].size(); ++m) {
-        unsigned id = final_graph_[n][m];
-        if (flags[id]) continue;
-        flags[id] = 1;
-
-        float dist = distance_->compare(query, data_ + dimension_ * (size_t)id,
-                                        (unsigned)dimension_);
-        Neighbor nn(id, dist, true);
-        fullset.push_back(nn);
-        if (dist >= retset[L - 1].distance) continue;
-        int r = InsertIntoPool(retset.data(), L, nn);
-
-        if (L + 1 < retset.size()) ++L;
-        if (r < nk) nk = r;
-      }
+                             std::vector<Neighbor> &pool) {
+  unsigned maxC = parameter.Get<unsigned>("C");
+  flags[q] = true;
+  for (unsigned i = 0; i < final_graph_[q].size() && pool.size() < maxC; i++) {
+    unsigned nid = final_graph_[q][i];
+    for (unsigned nn = 0; nn < final_graph_[nid].size() && pool.size() < maxC; nn++) {
+      unsigned nnid = final_graph_[nid][nn];
+      if (flags[nnid]) continue;
+      flags[nnid] = true;
+      float dist = distance_->compare(data_ + dimension_ * q,
+                                      data_ + dimension_ * nnid, dimension_);
+      pool.push_back(Neighbor(nnid, dist, true));
     }
-    if (nk <= k)
-      k = nk;
-    else
-      ++k;
   }
 }
 
@@ -220,9 +200,10 @@ void IndexNSG::init_graph(const Parameters &parameters) {
     center[j] /= nd_;
   }
   std::vector<Neighbor> tmp, pool;
-  ep_ = rand() % nd_;  // random initialize navigating point
+  eps_.resize(1);
+  eps_[0] = rand() % nd_;  // random initialize navigating point
   get_neighbors(center, parameters, tmp, pool);
-  ep_ = tmp[0].id;
+  eps_[0] = tmp[0].id;
 }
 
 void IndexNSG::sync_prune(unsigned q, std::vector<Neighbor> &pool,
@@ -230,7 +211,6 @@ void IndexNSG::sync_prune(unsigned q, std::vector<Neighbor> &pool,
                           boost::dynamic_bitset<> &flags,
                           SimpleNeighbor *cut_graph_) {
   unsigned range = parameter.Get<unsigned>("R");
-  unsigned maxc = parameter.Get<unsigned>("C");
   width = range;
   unsigned start = 0;
 
@@ -244,11 +224,17 @@ void IndexNSG::sync_prune(unsigned q, std::vector<Neighbor> &pool,
   }
 
   std::sort(pool.begin(), pool.end());
+#ifndef SSG
+  unsigned maxc = parameter.Get<unsigned>("C");
+  if (pool.size() > maxc) {
+    pool.resize(maxc);
+  }
+#endif
   std::vector<Neighbor> result;
   if (pool[start].id == q) start++;
   result.push_back(pool[start]);
 
-  while (result.size() < range && (++start) < pool.size() && start < maxc) {
+  while (result.size() < range && (++start) < pool.size()) {
     auto &p = pool[start];
     bool occlude = false;
     for (unsigned t = 0; t < result.size(); t++) {
@@ -259,10 +245,19 @@ void IndexNSG::sync_prune(unsigned q, std::vector<Neighbor> &pool,
       float djk = distance_->compare(data_ + dimension_ * (size_t)result[t].id,
                                      data_ + dimension_ * (size_t)p.id,
                                      (unsigned)dimension_);
+#ifdef SSG
+      float cos_ij = (p.distance + result[t].distance - djk) / 2 /
+                     sqrt(p.distance * result[t].distance);
+      if (cos_ij > cosinThreshold) {
+        occlude = true;
+        break;
+      }
+#else
       if (djk < p.distance /* dik */) {
         occlude = true;
         break;
       }
+#endif
     }
     if (!occlude) result.push_back(p);
   }
@@ -290,17 +285,16 @@ void IndexNSG::InterInsert(unsigned n, unsigned range,
 
     std::vector<SimpleNeighbor> temp_pool;
     int dup = 0;
-    {
-      LockGuard guard(locks[des]);
-      for (size_t j = 0; j < range; j++) {
-        if (des_pool[j].distance == -1) break;
-        if (n == des_pool[j].id) {
-          dup = 1;
-          break;
-        }
-        temp_pool.push_back(des_pool[j]);
+    LockGuard guard(locks[des]);
+    for (size_t j = 0; j < range; j++) {
+      if (des_pool[j].distance == -1) break;
+      if (n == des_pool[j].id) {
+        dup = 1;
+        break;
       }
+      temp_pool.push_back(des_pool[j]);
     }
+
     if (dup) continue;
 
     temp_pool.push_back(sn);
@@ -320,28 +314,42 @@ void IndexNSG::InterInsert(unsigned n, unsigned range,
           float djk = distance_->compare(data_ + dimension_ * (size_t)result[t].id,
                                          data_ + dimension_ * (size_t)p.id,
                                          (unsigned)dimension_);
+#ifdef SSG
+          float cos_ij = (p.distance + result[t].distance - djk) / 2 /
+                     sqrt(p.distance * result[t].distance);
+          if (cos_ij > cosinThreshold) {
+            occlude = true;
+            break;
+          }
+#else
           if (djk < p.distance /* dik */) {
             occlude = true;
             break;
           }
+#endif
         }
         if (!occlude) result.push_back(p);
       }
       {
-        LockGuard guard(locks[des]);
+        // LockGuard guard(locks[des]);
         for (unsigned t = 0; t < result.size(); t++) {
           des_pool[t] = result[t];
         }
-      }
-    } else {
-      LockGuard guard(locks[des]);
-      for (unsigned t = 0; t < range; t++) {
-        if (des_pool[t].distance == -1) {
-          des_pool[t] = sn;
-          if (t + 1 < range) des_pool[t + 1].distance = -1;
-          break;
+        if (result.size() < range) {
+          des_pool[result.size()].distance = -1;
         }
       }
+    } else {
+      // LockGuard guard(locks[des]);
+      des_pool[temp_pool.size()-1] = sn;
+      if (temp_pool.size() < range) des_pool[temp_pool.size()].distance = -1;
+//      for (unsigned t = 0; t < range; t++) {
+//        if (des_pool[t].distance == -1) {
+//          des_pool[t] = sn;
+//          if (t + 1 < range) des_pool[t + 1].distance = -1;
+//          break;
+//        }
+//      }
     }
   }
 }
@@ -357,17 +365,25 @@ void IndexNSG::Link(const Parameters &parameters, SimpleNeighbor *cut_graph_) {
   unsigned range = parameters.Get<unsigned>("R");
   std::vector<std::mutex> locks(nd_);
 
+  auto s1 = std::chrono::high_resolution_clock::now();
+  double totalPoolSize = 0;
 #pragma omp parallel
   {
     // unsigned cnt = 0;
     std::vector<Neighbor> pool, tmp;
     boost::dynamic_bitset<> flags{nd_, 0};
+    double poolSize = 0;
 #pragma omp for schedule(dynamic, 100)
     for (unsigned n = 0; n < nd_; ++n) {
       pool.clear();
       tmp.clear();
       flags.reset();
+#ifdef SSG
+      get_neighbors(n, parameters, flags, pool);
+#else
       get_neighbors(data_ + dimension_ * n, parameters, flags, tmp, pool);
+#endif
+      poolSize += pool.size();
       sync_prune(n, pool, parameters, flags, cut_graph_);
       /*
     cnt++;
@@ -377,12 +393,21 @@ void IndexNSG::Link(const Parameters &parameters, SimpleNeighbor *cut_graph_) {
       }
       */
     }
+#pragma omp critical
+    totalPoolSize += poolSize;
   }
+  auto s2 = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> diff = s2 - s1;
+  std::cout << "avg candidate num: " << totalPoolSize / nd_ << std::endl;
+  std::cout << "first link time: " << diff.count() << "\n";
 
-#pragma omp for schedule(dynamic, 100)
+#pragma omp parallel for schedule(dynamic, 100)
   for (unsigned n = 0; n < nd_; ++n) {
     InterInsert(n, range, locks, cut_graph_);
   }
+  auto s3 = std::chrono::high_resolution_clock::now();
+  diff = s3 - s2;
+  std::cout << "inter link time: " << diff.count() << "\n";
 }
 
 void IndexNSG::Build(size_t n, const float *data, const Parameters &parameters) {
@@ -409,7 +434,13 @@ void IndexNSG::Build(size_t n, const float *data, const Parameters &parameters) 
     }
   }
 
+  auto s1 = std::chrono::high_resolution_clock::now();
+
   tree_grow(parameters);
+
+  auto s2 = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> diff = s2 - s1;
+  std::cout << "dfs time: " << diff.count() << "\n";
 
   unsigned max = 0, min = 1e6, avg = 0;
   for (size_t i = 0; i < nd_; i++) {
@@ -418,6 +449,7 @@ void IndexNSG::Build(size_t n, const float *data, const Parameters &parameters) 
     min = min > size ? size : min;
     avg += size;
   }
+  width = max;
   avg /= 1.0 * nd_;
   printf("Degree Statistics: Max = %d, Min = %d, Avg = %d\n", max, min, avg);
 
@@ -428,38 +460,42 @@ void IndexNSG::Search(const float *query, const float *x, size_t K,
                       const Parameters &parameters, unsigned *indices) {
   const unsigned L = parameters.Get<unsigned>("L_search");
   data_ = x;
-  std::vector<Neighbor> retset(L + 1);
-  std::vector<unsigned> init_ids(L);
+  std::vector<Neighbor> retset;
+  retset.reserve(L + 1);
+  std::vector<unsigned> init_ids(eps_.size());
   boost::dynamic_bitset<> flags{nd_, 0};
   // std::mt19937 rng(rand());
   // GenRandom(rng, init_ids.data(), L, (unsigned) nd_);
 
-  unsigned tmp_l = 0;
-  for (; tmp_l < L && tmp_l < final_graph_[ep_].size(); tmp_l++) {
-    init_ids[tmp_l] = final_graph_[ep_][tmp_l];
-    flags[init_ids[tmp_l]] = true;
+  for (unsigned i = 0; i < init_ids.size() ; i++) {
+    init_ids[i] = eps_[i];
+    flags[init_ids[i]] = true;
   }
 
-  while (tmp_l < L) {
-    unsigned id = rand() % nd_;
-    if (flags[id]) continue;
-    flags[id] = true;
-    init_ids[tmp_l] = id;
-    tmp_l++;
-  }
+//  while (init_ids.size() < L) {
+//    unsigned id = rand() % nd_;
+//    if (flags[id]) continue;
+//    init_ids.push_back(id);
+//    flags[id] = true;
+//  }
 
+  unsigned poolSize = 0;
   for (unsigned i = 0; i < init_ids.size(); i++) {
     unsigned id = init_ids[i];
     float dist =
         distance_->compare(data_ + dimension_ * id, query, (unsigned)dimension_);
-    retset[i] = Neighbor(id, dist, true);
+    retset.emplace_back(id, dist, true);
     // flags[id] = true;
+    poolSize++;
   }
 
-  std::sort(retset.begin(), retset.begin() + L);
+  std::sort(retset.begin(), retset.begin() + poolSize);
+  if (poolSize > L) {
+    poolSize = L;
+  }
   int k = 0;
-  while (k < (int)L) {
-    int nk = L;
+  while (k < (int)poolSize) {
+    int nk = poolSize;
 
     if (retset[k].flag) {
       retset[k].flag = false;
@@ -471,10 +507,11 @@ void IndexNSG::Search(const float *query, const float *x, size_t K,
         flags[id] = 1;
         float dist =
             distance_->compare(query, data_ + dimension_ * id, (unsigned)dimension_);
-        if (dist >= retset[L - 1].distance) continue;
+        if (poolSize == L && dist >= retset[L - 1].distance) continue;
         Neighbor nn(id, dist, true);
-        int r = InsertIntoPool(retset.data(), L, nn);
+        int r = InsertIntoPool(retset.data(), poolSize, nn);
 
+        if (poolSize < L) ++poolSize;
         if (r < nk) nk = r;
       }
     }
@@ -492,37 +529,40 @@ void IndexNSG::SearchWithOptGraph(const float *query, size_t K,
                                   const Parameters &parameters, unsigned *indices) {
   unsigned L = parameters.Get<unsigned>("L_search");
   DistanceFastL2 *dist_fast = (DistanceFastL2 *)distance_;
+  hops = 0;
+  visitNum = 0;
 
-  std::vector<Neighbor> retset(L + 1);
-  std::vector<unsigned> init_ids(L);
+  std::vector<Neighbor> retset;
+  retset.reserve(L + 1);
+  std::vector<unsigned> init_ids(eps_.size());
   // std::mt19937 rng(rand());
   // GenRandom(rng, init_ids.data(), L, (unsigned) nd_);
 
   boost::dynamic_bitset<> flags{nd_, 0};
-  unsigned tmp_l = 0;
-  unsigned *neighbors = (unsigned *)(opt_graph_ + node_size * ep_ + data_len);
-  unsigned MaxM_ep = *neighbors;
-  neighbors++;
+//  unsigned tmp_l = 0;
+//  unsigned *neighbors = (unsigned *)(opt_graph_ + node_size * ep_ + data_len);
+//  unsigned MaxM_ep = *neighbors;
+//  neighbors++;
 
-  for (; tmp_l < L && tmp_l < MaxM_ep; tmp_l++) {
-    init_ids[tmp_l] = neighbors[tmp_l];
-    flags[init_ids[tmp_l]] = true;
+  for (unsigned i = 0; i < init_ids.size() ; i++) {
+    init_ids[i] = eps_[i];
+    flags[init_ids[i]] = true;
   }
 
-  while (tmp_l < L) {
-    unsigned id = rand() % nd_;
-    if (flags[id]) continue;
-    flags[id] = true;
-    init_ids[tmp_l] = id;
-    tmp_l++;
-  }
+//  while (init_ids.size() < 10) {
+//    unsigned id = rand() % nd_;
+//    if (flags[id]) continue;
+//    init_ids.push_back(id);
+//    flags[id] = true;
+//  }
+
 
   for (unsigned i = 0; i < init_ids.size(); i++) {
     unsigned id = init_ids[i];
     if (id >= nd_) continue;
     _mm_prefetch(opt_graph_ + node_size * id, _MM_HINT_T0);
   }
-  L = 0;
+  unsigned poolSize = 0;
   for (unsigned i = 0; i < init_ids.size(); i++) {
     unsigned id = init_ids[i];
     if (id >= nd_) continue;
@@ -530,16 +570,20 @@ void IndexNSG::SearchWithOptGraph(const float *query, size_t K,
     float norm_x = *x;
     x++;
     float dist = dist_fast->compare(x, query, norm_x, (unsigned)dimension_);
-    retset[i] = Neighbor(id, dist, true);
+    retset.emplace_back(id, dist, true);
     flags[id] = true;
-    L++;
+    ++visitNum;
+    poolSize++;
   }
   // std::cout<<L<<std::endl;
 
-  std::sort(retset.begin(), retset.begin() + L);
+  std::sort(retset.begin(), retset.begin() + poolSize);
+  if (poolSize > L) {
+    poolSize = L;
+  }
   int k = 0;
-  while (k < (int)L) {
-    int nk = L;
+  while (k < (int)poolSize) {
+    int nk = poolSize;
 
     if (retset[k].flag) {
       retset[k].flag = false;
@@ -559,11 +603,13 @@ void IndexNSG::SearchWithOptGraph(const float *query, size_t K,
         float norm = *data;
         data++;
         float dist = dist_fast->compare(query, data, norm, (unsigned)dimension_);
-        if (dist >= retset[L - 1].distance) continue;
+        ++visitNum;
+        if (poolSize == L && dist >= retset[L - 1].distance) continue;
+        ++hops;
         Neighbor nn(id, dist, true);
-        int r = InsertIntoPool(retset.data(), L, nn);
+        int r = InsertIntoPool(retset.data(), poolSize, nn);
 
-        // if(L+1 < retset.size()) ++L;
+        if (poolSize < L) ++poolSize;
         if (r < nk) nk = r;
       }
     }
@@ -667,20 +713,28 @@ void IndexNSG::findroot(boost::dynamic_bitset<> &flag, unsigned &root,
   final_graph_[root].push_back(id);
 }
 void IndexNSG::tree_grow(const Parameters &parameter) {
-  unsigned root = ep_;
+  unsigned root = eps_[0];
   boost::dynamic_bitset<> flags{nd_, 0};
-  unsigned unlinked_cnt = 0;
-  while (unlinked_cnt < nd_) {
-    DFS(flags, root, unlinked_cnt);
+  unsigned pre_linked_cnt = 0;
+  unsigned treeNum = 0;
+  double avgTreeSize = 0;
+  unsigned linked_cnt = 0;
+  while (linked_cnt < nd_) {
+    DFS(flags, root, linked_cnt);
     // std::cout << unlinked_cnt << '\n';
-    if (unlinked_cnt >= nd_) break;
+    ++treeNum;
+    avgTreeSize += (linked_cnt - pre_linked_cnt);
+    pre_linked_cnt = linked_cnt;
+    if (linked_cnt >= nd_) break;
     findroot(flags, root, parameter);
     // std::cout << "new root"<<":"<<root << '\n';
   }
-  for (size_t i = 0; i < nd_; ++i) {
-    if (final_graph_[i].size() > width) {
-      width = final_graph_[i].size();
-    }
-  }
+  std::cout << "tree num: " << treeNum
+            << ", avg tree size: " << avgTreeSize / treeNum << std::endl;
+//  for (size_t i = 0; i < nd_; ++i) {
+//    if (final_graph_[i].size() > width) {
+//      width = final_graph_[i].size();
+//    }
+//  }
 }
 }

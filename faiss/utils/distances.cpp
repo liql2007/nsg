@@ -190,7 +190,6 @@ void exhaustive_L2sqr_seq (
 
 
 
-
 /** Find the nearest neighbors for nx queries in a set of ny vectors */
 template<class ResultHandler>
 void exhaustive_inner_product_blas (
@@ -199,40 +198,41 @@ void exhaustive_inner_product_blas (
         size_t d, size_t nx, size_t ny,
         ResultHandler & res)
 {
-    // BLAS does not like empty matrices
-    if (nx == 0 || ny == 0) return;
-
-    /* block sizes */
-    const size_t bs_x = distance_compute_blas_query_bs;
-    const size_t bs_y = distance_compute_blas_database_bs;
-    std::unique_ptr<float[]> ip_block(new float[bs_x * bs_y]);
-
-    for (size_t i0 = 0; i0 < nx; i0 += bs_x) {
-        size_t i1 = i0 + bs_x;
-        if(i1 > nx) i1 = nx;
-
-        res.begin_multiple(i0, i1);
-
-        for (size_t j0 = 0; j0 < ny; j0 += bs_y) {
-            size_t j1 = j0 + bs_y;
-            if (j1 > ny) j1 = ny;
-            /* compute the actual dot products */
-            {
-                float one = 1, zero = 0;
-                FINTEGER nyi = j1 - j0, nxi = i1 - i0, di = d;
-                sgemm_ ("Transpose", "Not transpose", &nyi, &nxi, &di, &one,
-                        y + j0 * d, &di,
-                        x + i0 * d, &di, &zero,
-                        ip_block.get(), &nyi);
-            }
-
-            res.add_results(j0, j1, ip_block.get());
-
-        }
-        res.end_multiple();
-        InterruptCallback::check ();
-
-    }
+    exhaustive_inner_product_seq(x, y, d, nx, ny, res);
+//    // BLAS does not like empty matrices
+//    if (nx == 0 || ny == 0) return;
+//
+//    /* block sizes */
+//    const size_t bs_x = distance_compute_blas_query_bs;
+//    const size_t bs_y = distance_compute_blas_database_bs;
+//    std::unique_ptr<float[]> ip_block(new float[bs_x * bs_y]);
+//
+//    for (size_t i0 = 0; i0 < nx; i0 += bs_x) {
+//        size_t i1 = i0 + bs_x;
+//        if(i1 > nx) i1 = nx;
+//
+//        res.begin_multiple(i0, i1);
+//
+//        for (size_t j0 = 0; j0 < ny; j0 += bs_y) {
+//            size_t j1 = j0 + bs_y;
+//            if (j1 > ny) j1 = ny;
+//            /* compute the actual dot products */
+//            {
+//                float one = 1, zero = 0;
+//                FINTEGER nyi = j1 - j0, nxi = i1 - i0, di = d;
+//                sgemm_ ("Transpose", "Not transpose", &nyi, &nxi, &di, &one,
+//                        y + j0 * d, &di,
+//                        x + i0 * d, &di, &zero,
+//                        ip_block.get(), &nyi);
+//            }
+//
+//            res.add_results(j0, j1, ip_block.get());
+//
+//        }
+//        res.end_multiple();
+//        InterruptCallback::check ();
+//
+//    }
 }
 
 
@@ -248,65 +248,66 @@ void exhaustive_L2sqr_blas (
         ResultHandler & res,
         const float *y_norms = nullptr)
 {
-    // BLAS does not like empty matrices
-    if (nx == 0 || ny == 0) return;
-
-    /* block sizes */
-    const size_t bs_x = distance_compute_blas_query_bs;
-    const size_t bs_y = distance_compute_blas_database_bs;
-    // const size_t bs_x = 16, bs_y = 16;
-    std::unique_ptr<float []> ip_block(new float[bs_x * bs_y]);
-    std::unique_ptr<float []> x_norms(new float[nx]);
-    std::unique_ptr<float []> del2;
-
-    fvec_norms_L2sqr (x_norms.get(), x, d, nx);
-
-    if (!y_norms) {
-        float *y_norms2 = new float[ny];
-        del2.reset(y_norms2);
-        fvec_norms_L2sqr (y_norms2, y, d, ny);
-        y_norms = y_norms2;
-    }
-
-    for (size_t i0 = 0; i0 < nx; i0 += bs_x) {
-        size_t i1 = i0 + bs_x;
-        if(i1 > nx) i1 = nx;
-
-        res.begin_multiple(i0, i1);
-
-        for (size_t j0 = 0; j0 < ny; j0 += bs_y) {
-            size_t j1 = j0 + bs_y;
-            if (j1 > ny) j1 = ny;
-            /* compute the actual dot products */
-            {
-                float one = 1, zero = 0;
-                FINTEGER nyi = j1 - j0, nxi = i1 - i0, di = d;
-                sgemm_ ("Transpose", "Not transpose", &nyi, &nxi, &di, &one,
-                        y + j0 * d, &di,
-                        x + i0 * d, &di, &zero,
-                        ip_block.get(), &nyi);
-            }
-
-            for (int64_t i = i0; i < i1; i++) {
-                float *ip_line = ip_block.get() + (i - i0) * (j1 - j0);
-
-                for (size_t j = j0; j < j1; j++) {
-                    float ip = *ip_line;
-                    float dis = x_norms[i] + y_norms[j] - 2 * ip;
-
-                    // negative values can occur for identical vectors
-                    // due to roundoff errors
-                    if (dis < 0) dis = 0;
-
-                    *ip_line = dis;
-                    ip_line++;
-                }
-            }
-            res.add_results(j0, j1, ip_block.get());
-        }
-        res.end_multiple();
-        InterruptCallback::check ();
-    }
+    exhaustive_L2sqr_seq(x, y, d, nx, ny, res);
+//    // BLAS does not like empty matrices
+//    if (nx == 0 || ny == 0) return;
+//
+//    /* block sizes */
+//    const size_t bs_x = distance_compute_blas_query_bs;
+//    const size_t bs_y = distance_compute_blas_database_bs;
+//    // const size_t bs_x = 16, bs_y = 16;
+//    std::unique_ptr<float []> ip_block(new float[bs_x * bs_y]);
+//    std::unique_ptr<float []> x_norms(new float[nx]);
+//    std::unique_ptr<float []> del2;
+//
+//    fvec_norms_L2sqr (x_norms.get(), x, d, nx);
+//
+//    if (!y_norms) {
+//        float *y_norms2 = new float[ny];
+//        del2.reset(y_norms2);
+//        fvec_norms_L2sqr (y_norms2, y, d, ny);
+//        y_norms = y_norms2;
+//    }
+//
+//    for (size_t i0 = 0; i0 < nx; i0 += bs_x) {
+//        size_t i1 = i0 + bs_x;
+//        if(i1 > nx) i1 = nx;
+//
+//        res.begin_multiple(i0, i1);
+//
+//        for (size_t j0 = 0; j0 < ny; j0 += bs_y) {
+//            size_t j1 = j0 + bs_y;
+//            if (j1 > ny) j1 = ny;
+//            /* compute the actual dot products */
+//            {
+//                float one = 1, zero = 0;
+//                FINTEGER nyi = j1 - j0, nxi = i1 - i0, di = d;
+//                sgemm_ ("Transpose", "Not transpose", &nyi, &nxi, &di, &one,
+//                        y + j0 * d, &di,
+//                        x + i0 * d, &di, &zero,
+//                        ip_block.get(), &nyi);
+//            }
+//
+//            for (int64_t i = i0; i < i1; i++) {
+//                float *ip_line = ip_block.get() + (i - i0) * (j1 - j0);
+//
+//                for (size_t j = j0; j < j1; j++) {
+//                    float ip = *ip_line;
+//                    float dis = x_norms[i] + y_norms[j] - 2 * ip;
+//
+//                    // negative values can occur for identical vectors
+//                    // due to roundoff errors
+//                    if (dis < 0) dis = 0;
+//
+//                    *ip_line = dis;
+//                    ip_line++;
+//                }
+//            }
+//            res.add_results(j0, j1, ip_block.get());
+//        }
+//        res.end_multiple();
+//        InterruptCallback::check ();
+//    }
 }
 
 
@@ -569,42 +570,42 @@ void pairwise_L2sqr (int64_t d,
                      float *dis,
                      int64_t ldq, int64_t ldb, int64_t ldd)
 {
-    if (nq == 0 || nb == 0) return;
-    if (ldq == -1) ldq = d;
-    if (ldb == -1) ldb = d;
-    if (ldd == -1) ldd = nb;
-
-    // store in beginning of distance matrix to avoid malloc
-    float *b_norms = dis;
-
-#pragma omp parallel for
-    for (int64_t i = 0; i < nb; i++)
-        b_norms [i] = fvec_norm_L2sqr (xb + i * ldb, d);
-
-#pragma omp parallel for
-    for (int64_t i = 1; i < nq; i++) {
-        float q_norm = fvec_norm_L2sqr (xq + i * ldq, d);
-        for (int64_t j = 0; j < nb; j++)
-            dis[i * ldd + j] = q_norm + b_norms [j];
-    }
-
-    {
-        float q_norm = fvec_norm_L2sqr (xq, d);
-        for (int64_t j = 0; j < nb; j++)
-            dis[j] += q_norm;
-    }
-
-    {
-        FINTEGER nbi = nb, nqi = nq, di = d, ldqi = ldq, ldbi = ldb, lddi = ldd;
-        float one = 1.0, minus_2 = -2.0;
-
-        sgemm_ ("Transposed", "Not transposed",
-                &nbi, &nqi, &di,
-                &minus_2,
-                xb, &ldbi,
-                xq, &ldqi,
-                &one, dis, &lddi);
-    }
+//    if (nq == 0 || nb == 0) return;
+//    if (ldq == -1) ldq = d;
+//    if (ldb == -1) ldb = d;
+//    if (ldd == -1) ldd = nb;
+//
+//    // store in beginning of distance matrix to avoid malloc
+//    float *b_norms = dis;
+//
+//#pragma omp parallel for
+//    for (int64_t i = 0; i < nb; i++)
+//        b_norms [i] = fvec_norm_L2sqr (xb + i * ldb, d);
+//
+//#pragma omp parallel for
+//    for (int64_t i = 1; i < nq; i++) {
+//        float q_norm = fvec_norm_L2sqr (xq + i * ldq, d);
+//        for (int64_t j = 0; j < nb; j++)
+//            dis[i * ldd + j] = q_norm + b_norms [j];
+//    }
+//
+//    {
+//        float q_norm = fvec_norm_L2sqr (xq, d);
+//        for (int64_t j = 0; j < nb; j++)
+//            dis[j] += q_norm;
+//    }
+//
+//    {
+//        FINTEGER nbi = nb, nqi = nq, di = d, ldqi = ldq, ldbi = ldb, lddi = ldd;
+//        float one = 1.0, minus_2 = -2.0;
+//
+//        sgemm_ ("Transposed", "Not transposed",
+//                &nbi, &nqi, &di,
+//                &minus_2,
+//                xb, &ldbi,
+//                xq, &ldqi,
+//                &one, dis, &lddi);
+//    }
 
 }
 

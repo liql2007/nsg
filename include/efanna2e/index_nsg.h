@@ -14,6 +14,9 @@
 
 namespace efanna2e {
 
+extern const double kPi;
+extern const float cosinThreshold;
+
 class IndexNSG : public Index {
  public:
   explicit IndexNSG(const size_t dimension, const size_t n, Metric m, Index *initializer);
@@ -40,8 +43,27 @@ class IndexNSG : public Index {
       unsigned *indices);
   void OptimizeGraph(float* data);
 
+  unsigned getVisitNum() const { return visitNum; }
+
+  unsigned getHops() const { return hops; }
+
+  typedef std::vector<std::vector<unsigned > > CompactGraph;
+
+  CompactGraph& graph() { return final_graph_; }
+
+  const CompactGraph& graph() const { return final_graph_; }
+
+  unsigned getWidth() const { return width; }
+
+  void setWidth(unsigned w) { width = w; }
+
+  const std::vector<unsigned>& getEps() const { return eps_; }
+
+  std::vector<unsigned>& getEps() { return eps_; }
+
+  void tree_grow(const Parameters &parameter);
+
   protected:
-    typedef std::vector<std::vector<unsigned > > CompactGraph;
     typedef std::vector<SimpleNeighbors > LockGraph;
     typedef std::vector<nhood> KNNGraph;
 
@@ -60,25 +82,33 @@ class IndexNSG : public Index {
         boost::dynamic_bitset<>& flags,
         std::vector<Neighbor> &retset,
         std::vector<Neighbor> &fullset);
+
+  void get_neighbors(const unsigned q,
+                     const Parameters &parameter,
+                     boost::dynamic_bitset<> &flags,
+                     std::vector<Neighbor> &pool);
+
     //void add_cnn(unsigned des, Neighbor p, unsigned range, LockGraph& cut_graph_);
     void InterInsert(unsigned n, unsigned range, std::vector<std::mutex>& locks, SimpleNeighbor* cut_graph_);
     void sync_prune(unsigned q, std::vector<Neighbor>& pool, const Parameters &parameter, boost::dynamic_bitset<>& flags, SimpleNeighbor* cut_graph_);
     void Link(const Parameters &parameters, SimpleNeighbor* cut_graph_);
     void Load_nn_graph(const char *filename);
-    void tree_grow(const Parameters &parameter);
     void DFS(boost::dynamic_bitset<> &flag, unsigned root, unsigned &cnt);
     void findroot(boost::dynamic_bitset<> &flag, unsigned &root, const Parameters &parameter);
 
 
   private:
     unsigned width;
-    unsigned ep_;
+    // unsigned ep_;
+    std::vector<unsigned> eps_;
     std::vector<std::mutex> locks;
     char* opt_graph_;
     size_t node_size;
     size_t data_len;
     size_t neighbor_len;
     KNNGraph nnd_graph;
+    unsigned visitNum;
+    unsigned hops;
 };
 }
 

@@ -69,10 +69,10 @@ int fvec_madd_and_argmin (size_t n, const float *a,
 void reflection (const float * u, float * x, size_t n, size_t d, size_t nu);
 
 
-/** compute the Q of the QR decomposition for m > n
- * @param a   size n * m: input matrix and output Q
- */
-void matrix_qr (int m, int n, float *a);
+///** compute the Q of the QR decomposition for m > n
+// * @param a   size n * m: input matrix and output Q
+// */
+//void matrix_qr (int m, int n, float *a);
 
 /** distances are supposed to be sorted. Sorts indices with same distance*/
 void ranklist_handle_ties (int k, int64_t *idx, const float *dis);

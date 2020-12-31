@@ -4,31 +4,9 @@
 
 #include <efanna2e/index_nsg.h>
 #include <efanna2e/util.h>
+#include <efanna2e/test_helper.h>
 #include <chrono>
 #include <string>
-
-void load_data(char* filename, float*& data, unsigned& num,
-               unsigned& dim) {  // load data with sift10K pattern
-  std::ifstream in(filename, std::ios::binary);
-  if (!in.is_open()) {
-    std::cout << "open file error" << std::endl;
-    exit(-1);
-  }
-  in.read((char*)&dim, 4);
-  // std::cout<<"data dimension: "<<dim<<std::endl;
-  in.seekg(0, std::ios::end);
-  std::ios::pos_type ss = in.tellg();
-  size_t fsize = (size_t)ss;
-  num = (unsigned)(fsize / (dim + 1) / 4);
-  data = new float[(size_t)num * (size_t)dim];
-
-  in.seekg(0, std::ios::beg);
-  for (size_t i = 0; i < num; i++) {
-    in.seekg(4, std::ios::cur);
-    in.read((char*)(data + i * dim), dim * 4);
-  }
-  in.close();
-}
 
 void save_result(const char* filename,
                  std::vector<std::vector<unsigned> >& results) {
@@ -42,9 +20,13 @@ void save_result(const char* filename,
   out.close();
 }
 int main(int argc, char** argv) {
+#ifdef __AVX__
+    std::cout << "__AVX__" << std::endl;
+#endif
+
   if (argc != 7) {
     std::cout << argv[0]
-              << " data_file query_file nsg_path search_L search_K result_path"
+              << " data_file query_file nsg_path search_L search_K [result_path]"
               << std::endl;
     exit(-1);
   }
@@ -58,6 +40,9 @@ int main(int argc, char** argv) {
 
   unsigned L = (unsigned)atoi(argv[4]);
   unsigned K = (unsigned)atoi(argv[5]);
+  std::cerr << "L = " << L << ", ";
+  std::cerr << "K = " << K << std::endl;
+  std::cout << argv[3] << std::endl;
 
   if (L < K) {
     std::cout << "search_L cannot be smaller than search_K!" << std::endl;
@@ -77,16 +62,30 @@ int main(int argc, char** argv) {
 
   std::vector<std::vector<unsigned> > res(query_num);
   for (unsigned i = 0; i < query_num; i++) res[i].resize(K);
-
+  unsigned totalHops = 0;
+  unsigned totalVisit = 0;
   auto s = std::chrono::high_resolution_clock::now();
   for (unsigned i = 0; i < query_num; i++) {
     index.SearchWithOptGraph(query_load + i * dim, K, paras, res[i].data());
+    totalHops += index.getHops();
+    totalVisit += index.getVisitNum();
   }
   auto e = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> diff = e - s;
+  std::cout << "eps num: " << index.getEps().size() << "\n";
   std::cout << "search time: " << diff.count() << "\n";
+  std::cerr << "QPS: " << query_num / diff.count() << std::endl;
+  std::cerr << "AVG latency(ms): " << 1000 * diff.count() / query_num
+            << std::endl;
+  std::cerr << "AVG visit num: " << (float) totalVisit / query_num
+            << std::endl;
+  std::cerr << "AVG hop num: " << (float) totalHops / query_num
+            << std::endl;
 
-  save_result(argv[6], res);
+  GroundTruth truth(100);
+  truth.load(argv[6]);
+  truth.recallRate(res);
+  // save_data(argv[6], res);
 
   return 0;
 }

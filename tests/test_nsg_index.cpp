@@ -27,6 +27,9 @@ void load_data(char* filename, float*& data, unsigned& num,
   in.close();
 }
 int main(int argc, char** argv) {
+#ifdef __AVX__
+  std::cout << "__AVX__" << std::endl;
+#endif
   if (argc != 7) {
     std::cout << argv[0] << " data_file nn_graph_path L R C save_graph_file"
               << std::endl;

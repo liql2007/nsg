@@ -36,6 +36,10 @@ class Index {
 
   virtual void Load(const char *filename) = 0;
 
+  inline void setData(const float* data) { data_ = data; }
+
+  inline const float* getData() const { return data_; }
+
   inline bool HasBuilt() const { return has_built; }
 
   inline size_t GetDimension() const { return dimension_; };
@@ -43,12 +47,18 @@ class Index {
   inline size_t GetSizeOfDataset() const { return nd_; }
 
   inline const float *GetDataset() const { return data_; }
+
+  inline size_t getVecNum() const { return nd_; }
+
+  inline size_t getAvgDegree() const { return avgDegree_; }
+
  protected:
   const size_t dimension_;
   const float *data_;
   size_t nd_;
   bool has_built;
   Distance* distance_;
+  double avgDegree_;
 };
 
 }
