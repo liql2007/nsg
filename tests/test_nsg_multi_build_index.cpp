@@ -166,7 +166,7 @@ int main(int argc, char** argv) {
   std::cout << "C: " << C << std::endl;
   std::cout << "KNN build cmd: " << knn_build_cmd << std::endl;
 
-#define OnlyBuildNSG 1
+#define OnlyBuildNSG 0
 
 #if OnlyBuildNSG > 0
   Partitions parts;
