@@ -19,6 +19,12 @@ target_include_directories(test_nsg_multi_build_index PUBLIC
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>)
 target_compile_options(test_nsg_multi_build_index PRIVATE -Wno-unused-function -Wno-unused-variable)
 
+# test_create_overlapping_shards
+add_executable(test_create_overlapping_shards test_create_overlapping_shards.cpp)
+target_link_libraries(test_create_overlapping_shards ${PROJECT_NAME} faiss -ltcmalloc)
+target_include_directories(test_create_overlapping_shards PUBLIC
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>)
+
 # test_nsg_multi_merge_index
 add_executable(test_nsg_multi_merge_index test_nsg_multi_merge_index.cpp)
 target_link_libraries(test_nsg_multi_merge_index ${PROJECT_NAME} faiss -ltcmalloc)
