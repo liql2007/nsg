@@ -188,7 +188,7 @@ int main(int argc, char** argv) {
   std::cout << "merge time: " << diff.count() << "\n";
 
   index.Save(parts.getMergedNsgPath().c_str());
-  save_data(parts.getMergedVecPath().c_str(), vecData, parts.totalVecNum, parts.dim);
+  // save_data(parts.getMergedVecPath().c_str(), vecData, parts.totalVecNum, parts.dim);
 
   return 0;
 }

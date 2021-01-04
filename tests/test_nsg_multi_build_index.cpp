@@ -40,8 +40,6 @@ int main(int argc, char** argv) {
   std::cout << "C: " << C << std::endl;
   std::cout << "KNN build cmd: " << knn_build_cmd << std::endl;
 
-#define OnlyBuildNSG 0
-
   Partitions parts;
   parts.deserialize(multi_index_dir);
 
@@ -50,10 +48,8 @@ int main(int argc, char** argv) {
     std::cout << "** Partition: " << i + 1 << std::endl;
     const auto& part = parts.partInfos[i];
 
-#if OnlyBuildNSG == 0
     std::cout << "Build KNN" << std::endl;
     buildKNN(part, knn_build_cmd);
-#endif
 
     float* vecData = NULL;
     unsigned pointNum, dimI;
