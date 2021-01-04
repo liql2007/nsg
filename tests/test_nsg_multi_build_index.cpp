@@ -4,8 +4,6 @@
 
 #include <cassert>
 #include <memory>
-#include <efanna2e/util.h>
-#include <efanna2e/neighbor.h>
 #include <efanna2e/index_nsg.h>
 #include <faiss/Clustering.h>
 #include <faiss/IndexFlat.h>
@@ -86,65 +84,6 @@ void buildKNN(const PartInfo& part, const char* knnBuildCmd) {
   }
 }
 
-void createPartGroundTruth(const PartInfo& part, const float* vecData,
-                           unsigned pointNum, unsigned dim) {
-  auto s = std::chrono::high_resolution_clock::now();
-  efanna2e::DistanceL2 distance;
-  const constexpr unsigned QueryNum = 200;
-  const constexpr unsigned TopK = 100;
-  std::mt19937 rng(time(nullptr));
-  std::vector<unsigned> queryIds(QueryNum);
-  efanna2e::GenRandom(rng, queryIds.data(), QueryNum, pointNum);
-  std::vector<std::vector<unsigned>> topNeighbors(QueryNum);
-  std::vector<float> qVecs(QueryNum * dim);
-#pragma omp parallel for
-  for (unsigned i = 0; i < QueryNum; ++i) {
-    auto qId = queryIds[i];
-    efanna2e::Neighbor nn(qId, 0, true);
-    std::vector<efanna2e::Neighbor> neighborPool;
-    neighborPool.reserve(TopK + 1);
-    neighborPool.resize(TopK);
-    neighborPool[0] = std::move(nn);
-    unsigned poolSize = 1;
-    auto q = vecData + qId * dim;
-    std::memcpy(qVecs.data() + i * dim, q, dim * sizeof(float));
-    for (unsigned vId = 0; vId < pointNum; ++vId) {
-      if (vId == qId) {
-        continue;
-      }
-      auto v = vecData + vId * dim;
-      float dist = distance.compare(v, q, dim);
-      efanna2e::Neighbor nn(vId, dist, true);
-      efanna2e::InsertIntoPool(neighborPool.data(), poolSize, nn);
-      if (poolSize < TopK) {
-        ++poolSize;
-      }
-    }
-    assert(poolSize == TopK);
-    std::sort(neighborPool.begin(), neighborPool.end(),
-              [](const efanna2e::Neighbor& l, const efanna2e::Neighbor& r) {
-                return l.distance < r.distance; });
-    auto& queryTopNeighbor = topNeighbors[i];
-    queryTopNeighbor.reserve(TopK);
-    for (const auto& nn : neighborPool) {
-      queryTopNeighbor.push_back(nn.id);
-    }
-  }
-  save_data(part.groundTruthPath.c_str(), topNeighbors);
-  save_data(part.queryPath.c_str(), qVecs.data(), QueryNum, dim);
-  auto e = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double> diff = e - s;
-  std::cout << "ground truth time: " << diff.count() << "\n";
-
-//  std::cout << "query:" << std::endl;
-//  print_vector(qVecs.data(), dim);
-//  for (unsigned i = 0; i < 3; ++i) {
-//    auto id = topNeighbors[0][i];
-//    std::cout << "neighbor " << i + 1 << ":" << id << std::endl;
-//    print_vector(vecData + id * dim, dim);
-//  }
-}
-
 }
 
 int main(int argc, char** argv) {
@@ -195,7 +134,9 @@ int main(int argc, char** argv) {
 
 #if OnlyBuildNSG == 0
     std::cout << "Create Ground Truth" << std::endl;
-    createPartGroundTruth(part, vecData, pointNum, dimI);
+    GroundTruth::createPartGroundTruth(
+      part.queryPath.c_str(), part.groundTruthPath.c_str(),
+      vecData, pointNum, dimI, 200, 100);
 #endif
 
     std::cout << "Build NSG" << std::endl;

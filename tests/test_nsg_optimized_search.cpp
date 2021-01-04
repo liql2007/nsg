@@ -8,17 +8,6 @@
 #include <chrono>
 #include <string>
 
-void save_result(const char* filename,
-                 std::vector<std::vector<unsigned> >& results) {
-  std::ofstream out(filename, std::ios::binary | std::ios::out);
-
-  for (unsigned i = 0; i < results.size(); i++) {
-    unsigned GK = (unsigned)results[i].size();
-    out.write((char*)&GK, sizeof(unsigned));
-    out.write((char*)results[i].data(), GK * sizeof(unsigned));
-  }
-  out.close();
-}
 int main(int argc, char** argv) {
 #ifdef __AVX__
     std::cout << "__AVX__" << std::endl;
@@ -26,7 +15,7 @@ int main(int argc, char** argv) {
 
   if (argc != 7) {
     std::cout << argv[0]
-              << " data_file query_file nsg_path search_L search_K [result_path]"
+              << " data_file query_file nsg_path search_L search_K ground_truth"
               << std::endl;
     exit(-1);
   }
@@ -37,12 +26,13 @@ int main(int argc, char** argv) {
   unsigned query_num, query_dim;
   load_data(argv[2], query_load, query_num, query_dim);
   assert(dim == query_dim);
-
+  auto nsgPath = argv[3];
   unsigned L = (unsigned)atoi(argv[4]);
   unsigned K = (unsigned)atoi(argv[5]);
   std::cerr << "L = " << L << ", ";
   std::cerr << "K = " << K << std::endl;
-  std::cout << argv[3] << std::endl;
+  std::cout << nsgPath << std::endl;
+  auto groundTruthPath = argv[6];
 
   if (L < K) {
     std::cout << "search_L cannot be smaller than search_K!" << std::endl;
@@ -53,7 +43,7 @@ int main(int argc, char** argv) {
   // align the data before build query_load = efanna2e::data_align(query_load,
   // query_num, query_dim);
   efanna2e::IndexNSG index(dim, points_num, efanna2e::FAST_L2, nullptr);
-  index.Load(argv[3]);
+  index.Load(nsgPath);
   index.OptimizeGraph(data_load);
 
   efanna2e::Parameters paras;
@@ -83,9 +73,8 @@ int main(int argc, char** argv) {
             << std::endl;
 
   GroundTruth truth(100);
-  truth.load(argv[6]);
+  truth.load(groundTruthPath);
   truth.recallRate(res);
-  // save_data(argv[6], res);
 
   return 0;
 }

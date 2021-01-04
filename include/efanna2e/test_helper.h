@@ -10,6 +10,9 @@
 #include <cassert>
 #include <cstring>
 #include <sys/stat.h>
+#include <efanna2e/util.h>
+#include <efanna2e/distance.h>
+#include <efanna2e/neighbor.h>
 
 template<typename T>
 void print_vector(const T* vec, unsigned size) {
@@ -78,41 +81,87 @@ void save_data(const char* filename, const T* data, unsigned num, unsigned dim) 
 
 
 struct GroundTruth {
-    unsigned truthItemNum;
-    unsigned queryNum;
-    unsigned* data;
-    unsigned TOPK;
+  unsigned truthItemNum;
+  unsigned queryNum;
+  unsigned* data;
+  unsigned TOPK;
 
-    GroundTruth(unsigned TOPK) : TOPK(TOPK) {}
+  GroundTruth(unsigned TOPK) : TOPK(TOPK) {}
 
-    void load(const char* filename) {
-        load_data(filename, data, queryNum, truthItemNum);
-        std::cout << "ground truth query num: " << queryNum << std::endl;
-        std::cout << "ground truth item num per query: " << truthItemNum << std::endl;
-    }
+  void load(const char* filename) {
+    load_data(filename, data, queryNum, truthItemNum);
+    std::cout << "ground truth query num: " << queryNum << std::endl;
+    std::cout << "ground truth item num per query: " << truthItemNum << std::endl;
+  }
 
-    void recallRate(const std::vector<std::vector<unsigned>>& res) {
-        assert(TOPK <= truthItemNum);
-        assert(res.size() <= queryNum);
-        float avgRecallVal = 0;
-        for (unsigned qi = 0; qi < res.size(); ++qi) {
-            auto truth = data + qi * truthItemNum;
-            unsigned recallNum = 0;
-            for (auto docId : res[qi]) {
-                for (unsigned j = 0; j < TOPK; ++j) {
-                    if (truth[j] == docId) {
-                        ++recallNum;
-                        break;
-                    }
-                }
-            }
-            auto recallRateVal = (float)recallNum / TOPK;
-            // recallRate.push_back(recallRateVal);
-            avgRecallVal += recallRateVal;
+  void recallRate(const std::vector<std::vector<unsigned>>& res) {
+    assert(TOPK <= truthItemNum);
+    assert(res.size() <= queryNum);
+    float avgRecallVal = 0;
+    for (unsigned qi = 0; qi < res.size(); ++qi) {
+      auto truth = data + qi * truthItemNum;
+      unsigned recallNum = 0;
+      for (auto docId : res[qi]) {
+        for (unsigned j = 0; j < TOPK; ++j) {
+          if (truth[j] == docId) {
+            ++recallNum;
+            break;
+          }
         }
-        auto recall = avgRecallVal / res.size();
-        std::cout << "recall(top" << TOPK << ") : " << recall << std::endl;
+      }
+      auto recallRateVal = (float) recallNum / TOPK;
+      // recallRate.push_back(recallRateVal);
+      avgRecallVal += recallRateVal;
     }
+    auto recall = avgRecallVal / res.size();
+    std::cout << "recall(top" << TOPK << ") : " << recall << std::endl;
+  }
+
+  static void createPartGroundTruth(const char* queryPath, const char* groundTruthPath,
+                                    const float* vecData, unsigned pointNum, unsigned dim,
+                                    unsigned queryNum, unsigned topK) {
+    efanna2e::DistanceL2 distance;
+    std::mt19937 rng(time(nullptr));
+    std::vector<unsigned> queryIds(queryNum);
+    efanna2e::GenRandom(rng, queryIds.data(), queryNum, pointNum);
+    std::vector<std::vector<unsigned>> topNeighbors(queryNum);
+    std::vector<float> qVecs(queryNum * dim);
+#pragma omp parallel for
+    for (unsigned i = 0; i < queryNum; ++i) {
+      auto qId = queryIds[i];
+      efanna2e::Neighbor nn(qId, 0, true);
+      std::vector<efanna2e::Neighbor> neighborPool;
+      neighborPool.reserve(topK + 1);
+      neighborPool.resize(topK);
+      neighborPool[0] = std::move(nn);
+      unsigned poolSize = 1;
+      auto q = vecData + qId * dim;
+      std::memcpy(qVecs.data() + i * dim, q, dim * sizeof(float));
+      for (unsigned vId = 0; vId < pointNum; ++vId) {
+        if (vId == qId) {
+          continue;
+        }
+        auto v = vecData + vId * dim;
+        float dist = distance.compare(v, q, dim);
+        efanna2e::Neighbor nn(vId, dist, true);
+        efanna2e::InsertIntoPool(neighborPool.data(), poolSize, nn);
+        if (poolSize < topK) {
+          ++poolSize;
+        }
+      }
+      assert(poolSize == topK);
+      std::sort(neighborPool.begin(), neighborPool.end(),
+                [](const efanna2e::Neighbor& l, const efanna2e::Neighbor& r) {
+                  return l.distance < r.distance; });
+      auto& queryTopNeighbor = topNeighbors[i];
+      queryTopNeighbor.reserve(topK);
+      for (const auto& nn : neighborPool) {
+        queryTopNeighbor.push_back(nn.id);
+      }
+    }
+    save_data(groundTruthPath, topNeighbors);
+    save_data(queryPath, qVecs.data(), queryNum, dim);
+  }
 };
 
 struct PartInfo {
