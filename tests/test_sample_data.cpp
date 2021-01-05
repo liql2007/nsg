@@ -13,7 +13,7 @@ int main(int argc, char** argv) {
   }
   auto dataPath = argv[1];
   auto sampleDataPath = argv[2];
-  auto sampleNum = (unsigned)atoi(argv[3]);
+  auto sampleNum = (size_t)atoi(argv[3]);
 
   float* vecData = nullptr;
   unsigned pointNum, dim;
@@ -23,7 +23,7 @@ int main(int argc, char** argv) {
   std::vector<unsigned> vecIds(sampleNum);
   efanna2e::GenRandom(rng, vecIds.data(), sampleNum, pointNum);
   std::vector<float> sampleData(sampleNum * dim);
-  for (unsigned i = 0; i < sampleNum; ++i) {
+  for (size_t i = 0; i < sampleNum; ++i) {
     auto vecId = vecIds[i];
     auto vec = vecData + vecId * dim;
     memcpy(&sampleData[i * dim], vec, dim * sizeof(float));

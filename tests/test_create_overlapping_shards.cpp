@@ -59,15 +59,15 @@ int main(int argc, char** argv) {
 
   faiss::IndexFlatL2 classifyIndex(dim);
   classifyIndex.add(partNum, centroidsData);
-  const constexpr unsigned ProjectClusterNum = 2;
-  const constexpr unsigned BatchNum = 4096;
+  const constexpr size_t ProjectClusterNum = 2;
+  const constexpr size_t BatchNum = 4096;
   faiss::Index::idx_t label[ProjectClusterNum * BatchNum];
   float dis[ProjectClusterNum * BatchNum];
-  for (unsigned gid = 0; gid < pointNum; gid += BatchNum) {
+  for (size_t gid = 0; gid < pointNum; gid += BatchNum) {
     auto vecs = vecData + gid * dim;
     auto realBatchNum = std::min(BatchNum, pointNum - gid);
     classifyIndex.search(realBatchNum, vecs, ProjectClusterNum, &dis[0], &label[0]);
-    for (unsigned vi = 0; vi < realBatchNum; ++vi) {
+    for (size_t vi = 0; vi < realBatchNum; ++vi) {
       auto vec = vecs + vi * dim;
       for (unsigned k = 0; k < ProjectClusterNum; ++k) {
         addDocFun(label[vi * ProjectClusterNum + k], vec, gid + vi);

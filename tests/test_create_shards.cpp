@@ -19,8 +19,8 @@ int main(int argc, char** argv) {
   unsigned pointNum, dim;
   load_data(dataPath, vecData, pointNum, dim);
 
-  auto minSize = pointNum / shardNum;
-  auto leftNum = pointNum % shardNum;
+  size_t minSize = pointNum / shardNum;
+  size_t leftNum = pointNum % shardNum;
   for (unsigned i = 0; i < shardNum; ++i) {
     auto path = std::string(shardDirPath) + "/shard" + std::to_string(i + 1) + ".fvecs";
     auto size = minSize + (i < leftNum ? 1 : 0);

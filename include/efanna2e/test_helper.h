@@ -53,7 +53,7 @@ void save_data(const char* filename, std::vector<std::vector<T>>& results) {
     for (unsigned i = 0; i < results.size(); i++) {
         unsigned sz = (unsigned)results[i].size();
         out.write((char*)&sz, sizeof(unsigned));
-        out.write((char*)results[i].data(), sz * sizeof(T));
+        out.write((char*)results[i].data(), (size_t)sz * sizeof(T));
     }
 
     if (out.bad()) {
@@ -67,9 +67,9 @@ void save_data(const char* filename, std::vector<std::vector<T>>& results) {
 template<typename T>
 void save_data(const char* filename, const T* data, unsigned num, unsigned dim) {
     std::ofstream out(filename, std::ios::binary | std::ios::out);
-    for (unsigned i = 0; i < num; i++) {
+    for (size_t i = 0; i < num; i++) {
         out.write((char*)&dim, sizeof(unsigned));
-        out.write((char*)(data + i * dim), dim * sizeof(T));
+        out.write((char*)(data + i * dim), (size_t)dim * sizeof(T));
     }
     if (out.bad()) {
         out.close();
@@ -98,7 +98,7 @@ struct GroundTruth {
     assert(TOPK <= truthItemNum);
     assert(res.size() <= queryNum);
     float avgRecallVal = 0;
-    for (unsigned qi = 0; qi < res.size(); ++qi) {
+    for (size_t qi = 0; qi < res.size(); ++qi) {
       auto truth = data + qi * truthItemNum;
       unsigned recallNum = 0;
       for (auto docId : res[qi]) {
@@ -125,9 +125,9 @@ struct GroundTruth {
     std::vector<unsigned> queryIds(queryNum);
     efanna2e::GenRandom(rng, queryIds.data(), queryNum, pointNum);
     std::vector<std::vector<unsigned>> topNeighbors(queryNum);
-    std::vector<float> qVecs(queryNum * dim);
+    std::vector<float> qVecs((size_t)queryNum * dim);
 #pragma omp parallel for
-    for (unsigned i = 0; i < queryNum; ++i) {
+    for (size_t i = 0; i < queryNum; ++i) {
       auto qId = queryIds[i];
       efanna2e::Neighbor nn(qId, 0, true);
       std::vector<efanna2e::Neighbor> neighborPool;
@@ -135,9 +135,9 @@ struct GroundTruth {
       neighborPool.resize(topK);
       neighborPool[0] = std::move(nn);
       unsigned poolSize = 1;
-      auto q = vecData + qId * dim;
+      auto q = vecData + (size_t)qId * dim;
       std::memcpy(qVecs.data() + i * dim, q, dim * sizeof(float));
-      for (unsigned vId = 0; vId < pointNum; ++vId) {
+      for (size_t vId = 0; vId < pointNum; ++vId) {
         if (vId == qId) {
           continue;
         }
@@ -165,7 +165,7 @@ struct GroundTruth {
 };
 
 struct PartInfo {
-    unsigned vecNum;
+    size_t vecNum;
     std::string docPath;
     std::string idPath;
     std::string nsgPath;
@@ -176,9 +176,9 @@ struct PartInfo {
 
 struct Partitions {
     std::vector<PartInfo> partInfos;
-    unsigned totalVecNum = 0;
+    size_t totalVecNum = 0;
     std::string dirPath;
-    unsigned dim;
+    size_t dim;
 
     std::string getMetaPath() { return dirPath + "meta.txt"; }
 

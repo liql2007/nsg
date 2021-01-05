@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
   faiss::IndexFlatL2 index (dim);
   index.add(centroid_num, centroids_data);
   float sumRecallRate = 0;
-  for (unsigned i = 0; i < query_num; ++i) {
+  for (size_t i = 0; i < query_num; ++i) {
     float* q = query_data + i * dim;
     faiss::Index::idx_t label[2];
     float dis[2];
@@ -50,8 +50,8 @@ int main(int argc, char** argv) {
 
     std::vector<float> vecVec(truth.truthItemNum * dim);
     unsigned* ts = truth.data + i * truth.truthItemNum;
-    for (unsigned ti = 0; ti < truth.truthItemNum; ++ti) {
-      auto vec = vec_data + ts[ti] * dim;
+    for (size_t ti = 0; ti < truth.truthItemNum; ++ti) {
+      auto vec = vec_data + (size_t)ts[ti] * dim;
       std::memcpy(vecVec.data() + ti * dim, vec, dim * sizeof(float));
     }
     std::vector<faiss::Index::idx_t> labelVec(truth.truthItemNum);

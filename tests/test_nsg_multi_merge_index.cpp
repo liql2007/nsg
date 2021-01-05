@@ -38,7 +38,7 @@ void mergeNsgEdge(const PartInfo& part, const efanna2e::IndexNSG& partIndex,
     return false;
   };
 #pragma omp parallel for
-  for (unsigned i = 0; i < partGraph.size(); ++i) {
+  for (size_t i = 0; i < partGraph.size(); ++i) {
     auto gid = docIds[i];
     auto& neighbors = graph[gid];
     if (neighbors.empty()) { // first add
@@ -71,7 +71,7 @@ void pruneEdge(unsigned R, efanna2e::IndexNSG& index) {
   auto data = index.getData();
   auto dim = index.GetDimension();
 #pragma omp parallel for
-  for (unsigned id = 0; id < graph.size(); ++id) {
+  for (size_t id = 0; id < graph.size(); ++id) {
     auto& neighbors = graph[id];
     if (neighbors.size() < R) {
       continue;

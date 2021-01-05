@@ -527,12 +527,22 @@ void IndexNSG::Search(const float *query, const float *x, size_t K,
 
 void IndexNSG::SearchWithOptGraph(const float *query, size_t K,
                                   const Parameters &parameters, unsigned *indices) {
+  std::vector<Neighbor> retset;
+  SearchWithOptGraph(query, K, parameters, retset);
+  for (size_t i = 0; i < K; i++) {
+    indices[i] = retset[i].id;
+  }
+}
+
+void IndexNSG::SearchWithOptGraph(const float *query, size_t K,
+                                  const Parameters &parameters,
+                                  std::vector<Neighbor>& retset) {
   unsigned L = parameters.Get<unsigned>("L_search");
   DistanceFastL2 *dist_fast = (DistanceFastL2 *)distance_;
   hops = 0;
   visitNum = 0;
 
-  std::vector<Neighbor> retset;
+  retset.clear();
   retset.reserve(L + 1);
   std::vector<unsigned> init_ids(eps_.size());
   // std::mt19937 rng(rand());
@@ -617,9 +627,6 @@ void IndexNSG::SearchWithOptGraph(const float *query, size_t K,
       k = nk;
     else
       ++k;
-  }
-  for (size_t i = 0; i < K; i++) {
-    indices[i] = retset[i].id;
   }
 }
 

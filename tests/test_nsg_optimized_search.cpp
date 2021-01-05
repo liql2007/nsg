@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
   unsigned totalHops = 0;
   unsigned totalVisit = 0;
   auto s = std::chrono::high_resolution_clock::now();
-  for (unsigned i = 0; i < query_num; i++) {
+  for (size_t i = 0; i < query_num; i++) {
     index.SearchWithOptGraph(query_load + i * dim, K, paras, res[i].data());
     totalHops += index.getHops();
     totalVisit += index.getVisitNum();

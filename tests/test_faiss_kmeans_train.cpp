@@ -8,7 +8,7 @@
 #include <faiss/IndexFlat.h>
 #include <efanna2e/test_helper.h>
 
-void save_kmeans_centroids(const char* filename, unsigned dim,
+void save_kmeans_centroids(const char* filename, size_t dim,
                            const std::vector<float>& centroids) {
   std::ofstream out(filename, std::ios::binary | std::ios::out);
 
@@ -51,7 +51,7 @@ int main(int argc, char** argv) {
   cp.seed = 123456;
   cp.nredo = 1;
 
-  faiss::Clustering clus (dim, k, cp);
+  faiss::Clustering clus(dim, k, cp);
   faiss::IndexFlatL2 index (dim);
   clus.train(points_num, learn_data, index);
   save_kmeans_centroids(centroids_result_path, dim, clus.centroids);
