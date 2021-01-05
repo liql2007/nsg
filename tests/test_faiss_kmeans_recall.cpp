@@ -59,7 +59,6 @@ int main(int argc, char** argv) {
     index.search(truth.truthItemNum, vecVec.data(), 1, disVec.data(), labelVec.data());
     unsigned matchNum = 0;
     for (unsigned ti = 0; ti < truth.truthItemNum; ++ti) {
-      // if (labelVec[ti] == label[0] || labelVec[ti] == label[1]) {
       if (labelVec[ti] == label[0]) {
         ++matchNum;
       }

@@ -79,6 +79,19 @@ void save_data(const char* filename, const T* data, unsigned num, unsigned dim) 
     out.close();
 }
 
+inline void checkAndCreateDir(const char* dirPath) {
+  struct stat sb;
+  if (stat(dirPath, &sb) == 0) {
+    if (!S_ISDIR(sb.st_mode)) {
+      std::cerr << dirPath << " is not dictionary" << std::endl;
+      exit(-1);
+    }
+  } else if (mkdir(dirPath, 0755) != 0) {
+    std::cerr << "create dictionary [" << dirPath << "] failed" << std::endl;
+    exit(-1);
+  }
+}
+
 
 struct GroundTruth {
   unsigned truthItemNum;
@@ -261,16 +274,7 @@ struct Partitions {
     }
 
     static Partitions create(const char* dirPath, unsigned partNum) {
-        struct stat sb;
-        if (stat(dirPath, &sb) == 0) {
-            if (!S_ISDIR(sb.st_mode)) {
-                std::cerr << dirPath << " is not dictionary" << std::endl;
-                exit(-1);
-            }
-        } else if (mkdir(dirPath, 0755) != 0) {
-            std::cerr << "create dictionary [" << dirPath << "] failed" << std::endl;
-            exit(-1);
-        }
+        checkAndCreateDir(dirPath);
         Partitions ret;
         ret.init(dirPath, partNum);
         return ret;

@@ -15,13 +15,15 @@ int main(int argc, char** argv) {
   auto shardDirPath = argv[2];
   auto shardNum = (unsigned)atoi(argv[3]);
 
+  checkAndCreateDir(shardDirPath);
+
   float* vecData = nullptr;
   unsigned pointNum, dim;
   load_data(dataPath, vecData, pointNum, dim);
 
   size_t minSize = pointNum / shardNum;
   size_t leftNum = pointNum % shardNum;
-  for (unsigned i = 0; i < shardNum; ++i) {
+  for (size_t i = 0; i < shardNum; ++i) {
     auto path = std::string(shardDirPath) + "/shard" + std::to_string(i + 1) + ".fvecs";
     auto size = minSize + (i < leftNum ? 1 : 0);
     save_data(path.c_str(), vecData, size, dim);

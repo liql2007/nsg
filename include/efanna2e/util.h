@@ -30,7 +30,7 @@ namespace efanna2e {
         }
     }
 
-    inline float* data_align(float* data_ori, unsigned point_num, unsigned& dim){
+    inline float* data_align(float* data_ori, size_t point_num, unsigned& dim){
       #ifdef __GNUC__
       #ifdef __AVX__
         #define DATA_ALIGN_FACTOR 8
@@ -53,7 +53,7 @@ namespace efanna2e {
         data_new = (float*)memalign(DATA_ALIGN_FACTOR * 4, point_num * new_dim * sizeof(float));
       #endif
 
-      for(unsigned i=0; i<point_num; i++){
+      for(size_t i=0; i<point_num; i++){
         memcpy(data_new + i * new_dim, data_ori + i * dim, dim * sizeof(float));
         memset(data_new + i * new_dim + dim, 0, (new_dim - dim) * sizeof(float));
       }
