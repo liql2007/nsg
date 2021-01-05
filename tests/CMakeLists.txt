@@ -33,10 +33,8 @@ target_include_directories(test_nsg_multi_merge_index PUBLIC
 target_compile_options(test_nsg_multi_merge_index PRIVATE -Wno-unused-function -Wno-unused-variable)
 
 # test_create_ground_truth
-add_executable(test_create_ground_truth test_create_shards.cpp)
+add_executable(test_create_ground_truth test_create_ground_truth.cpp)
 target_link_libraries(test_create_ground_truth ${PROJECT_NAME} -ltcmalloc)
-target_include_directories(test_create_ground_truth PUBLIC
-        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>)
 
 # test_create_shards
 add_executable(test_create_shards test_create_shards.cpp)
