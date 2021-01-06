@@ -63,7 +63,6 @@ int main(int argc, char** argv) {
   paras.Set<unsigned>("L_search", L);
 
   std::vector<std::vector<unsigned> > res(query_num);
-  for (unsigned i = 0; i < query_num; i++) res[i].resize(K);
   unsigned totalHops = 0;
   unsigned totalVisit = 0;
   auto s = std::chrono::high_resolution_clock::now();
@@ -72,7 +71,7 @@ int main(int argc, char** argv) {
     std::vector<efanna2e::Neighbor> globalRetSet, partRetSet;
     for (unsigned partId = 0; partId < nsgNum; ++partId) {
       auto& index = *indexVec[partId];
-      index.SearchWithOptGraph(query, K, paras, partRetSet);
+      index.SearchWithOptGraph(query, paras, partRetSet);
       totalHops += index.getHops();
       totalVisit += index.getVisitNum();
       if (partId == 0) {
@@ -85,6 +84,7 @@ int main(int argc, char** argv) {
         }
       }
     }
+    res[i].resize(K);
     for (size_t j = 0; j < K; j++) {
       res[i][j] = globalRetSet[j].id;
     }

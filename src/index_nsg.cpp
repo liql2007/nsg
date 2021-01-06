@@ -68,6 +68,7 @@ void IndexNSG::Load(const char *filename) {
     in.read((char *)tmp.data(), k * sizeof(unsigned));
     final_graph_.push_back(tmp);
   }
+  assert(final_graph_.size() == nd_);
   avgDegree_ = cc / nd_;
   std::cerr << "Average Degree = " << avgDegree_
             << ",  Width:" << width << std::endl;
@@ -528,13 +529,13 @@ void IndexNSG::Search(const float *query, const float *x, size_t K,
 void IndexNSG::SearchWithOptGraph(const float *query, size_t K,
                                   const Parameters &parameters, unsigned *indices) {
   std::vector<Neighbor> retset;
-  SearchWithOptGraph(query, K, parameters, retset);
+  SearchWithOptGraph(query, parameters, retset);
   for (size_t i = 0; i < K; i++) {
     indices[i] = retset[i].id;
   }
 }
 
-void IndexNSG::SearchWithOptGraph(const float *query, size_t K,
+void IndexNSG::SearchWithOptGraph(const float *query,
                                   const Parameters &parameters,
                                   std::vector<Neighbor>& retset) {
   unsigned L = parameters.Get<unsigned>("L_search");

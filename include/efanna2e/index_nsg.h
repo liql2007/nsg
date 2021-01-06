@@ -41,7 +41,7 @@ class IndexNSG : public Index {
       size_t K,
       const Parameters &parameters,
       unsigned *indices);
-  void SearchWithOptGraph(const float *query, size_t K,
+  void SearchWithOptGraph(const float *query,
                           const Parameters &parameters,
                           std::vector<Neighbor>& retset);
   void OptimizeGraph(float* data);
