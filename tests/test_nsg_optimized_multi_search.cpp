@@ -33,6 +33,7 @@ int main(int argc, char** argv) {
 
   float* query_load = NULL;
   unsigned query_num, dim;
+  std::cout << "load query: " << queryFilePath << std::endl;
   load_data(queryFilePath, query_load, query_num, dim);
 
   // data_load = efanna2e::data_align(data_load, points_num, dim);//one must
@@ -46,11 +47,13 @@ int main(int argc, char** argv) {
     sprintf(path, dataPathPattern, i+1);
     float* data_load = NULL;
     unsigned points_num, dimI;
+    std::cout << "load vec: " << path << std::endl;
     load_data(path, data_load, points_num, dimI);
     assert(dimI == dim);
 
     indexVec[i] = new efanna2e::IndexNSG(dim, points_num, efanna2e::FAST_L2, nullptr);
     sprintf(path, nsgPathPattern, i+1);
+    std::cout << "load nsg: " << path << std::endl;
     indexVec[i]->Load(path);
     indexVec[i]->OptimizeGraph(data_load);
 

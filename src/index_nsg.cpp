@@ -589,6 +589,7 @@ void IndexNSG::SearchWithOptGraph(const float *query,
   // std::cout<<L<<std::endl;
 
   std::sort(retset.begin(), retset.begin() + poolSize);
+  retset.resize(L + 1);
   if (poolSize > L) {
     poolSize = L;
   }
