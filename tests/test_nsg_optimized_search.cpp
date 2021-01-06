@@ -54,6 +54,7 @@ int main(int argc, char** argv) {
   for (unsigned i = 0; i < query_num; i++) res[i].resize(K);
   unsigned totalHops = 0;
   unsigned totalVisit = 0;
+  std::cout << "Begin search" << std::endl;
   auto s = std::chrono::high_resolution_clock::now();
   for (size_t i = 0; i < query_num; i++) {
     index.SearchWithOptGraph(query_load + i * dim, K, paras, res[i].data());

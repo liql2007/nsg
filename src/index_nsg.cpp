@@ -600,7 +600,7 @@ void IndexNSG::SearchWithOptGraph(const float *query,
     if (retset[k].flag) {
       retset[k].flag = false;
       unsigned n = retset[k].id;
-
+      ++hops;
       _mm_prefetch(opt_graph_ + node_size * n + data_len, _MM_HINT_T0);
       unsigned *neighbors = (unsigned *)(opt_graph_ + node_size * n + data_len);
       unsigned MaxM = *neighbors;
@@ -617,7 +617,6 @@ void IndexNSG::SearchWithOptGraph(const float *query,
         float dist = dist_fast->compare(query, data, norm, (unsigned)dimension_);
         ++visitNum;
         if (poolSize == L && dist >= retset[L - 1].distance) continue;
-        ++hops;
         Neighbor nn(id, dist, true);
         int r = InsertIntoPool(retset.data(), poolSize, nn);
 

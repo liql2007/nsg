@@ -68,6 +68,7 @@ int main(int argc, char** argv) {
   std::vector<std::vector<unsigned> > res(query_num);
   unsigned totalHops = 0;
   unsigned totalVisit = 0;
+  std::cout << "Begin search" << std::endl;
   auto s = std::chrono::high_resolution_clock::now();
   for (size_t i = 0; i < query_num; i++) {
     auto query = query_load + i * dim;
