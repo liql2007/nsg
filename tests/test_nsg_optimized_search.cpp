@@ -5,6 +5,7 @@
 #include <efanna2e/index_nsg.h>
 #include <efanna2e/util.h>
 #include <efanna2e/test_helper.h>
+#include <sys/mman.h>
 #include <chrono>
 #include <string>
 
@@ -45,6 +46,7 @@ int main(int argc, char** argv) {
   efanna2e::IndexNSG index(dim, points_num, efanna2e::FAST_L2, nullptr);
   index.Load(nsgPath);
   index.OptimizeGraph(data_load);
+  delete[] data_load;
 
   efanna2e::Parameters paras;
   paras.Set<unsigned>("L_search", L);
@@ -56,10 +58,17 @@ int main(int argc, char** argv) {
   unsigned totalVisit = 0;
   std::cout << "Begin search" << std::endl;
   auto s = std::chrono::high_resolution_clock::now();
+  std::vector<efanna2e::Neighbor> retset;
+  std::vector<unsigned>flags(index.getVecNum() + 1, 0);
+  mlock(flags.data(), flags.size() * sizeof(unsigned));
   for (size_t i = 0; i < query_num; i++) {
-    index.SearchWithOptGraph(query_load + i * dim, K, paras, res[i].data());
+    flags.back() = i + 1;
+    index.SearchWithOptGraph(query_load + i * dim, paras, flags, retset);
     totalHops += index.getHops();
     totalVisit += index.getVisitNum();
+    for (size_t j = 0; j < K; j++) {
+        res[i][j] = retset[j].id;
+    }
   }
   auto e = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> diff = e - s;
@@ -73,7 +82,7 @@ int main(int argc, char** argv) {
   std::cerr << "AVG hop num: " << (float) totalHops / query_num
             << std::endl;
 
-  GroundTruth truth(100);
+  GroundTruth truth(K);
   truth.load(groundTruthPath);
   truth.recallRate(res);
 

@@ -1,6 +1,7 @@
 #include <efanna2e/index_nsg.h>
 #include <efanna2e/util.h>
 #include <efanna2e/test_helper.h>
+#include <sys/mman.h>
 #include <chrono>
 #include <string>
 
@@ -41,6 +42,7 @@ int main(int argc, char** argv) {
   // query_num, query_dim);
   std::vector<efanna2e::IndexNSG*> indexVec(nsgNum);
   std::vector<unsigned> offsetVec(nsgNum, 0);
+  unsigned max_points_num = 0;
   for (unsigned i = 0; i < nsgNum; ++i) {
     char path[1024];
 
@@ -50,12 +52,14 @@ int main(int argc, char** argv) {
     std::cout << "load vec: " << path << std::endl;
     load_data(path, data_load, points_num, dimI);
     assert(dimI == dim);
+    max_points_num = std::max(max_points_num, points_num);
 
     indexVec[i] = new efanna2e::IndexNSG(dim, points_num, efanna2e::FAST_L2, nullptr);
     sprintf(path, nsgPathPattern, i+1);
     std::cout << "load nsg: " << path << std::endl;
     indexVec[i]->Load(path);
     indexVec[i]->OptimizeGraph(data_load);
+    delete[] data_load;
 
     if (i > 0) {
       offsetVec[i] = offsetVec[i-1] + indexVec[i-1]->getVecNum();
@@ -70,12 +74,17 @@ int main(int argc, char** argv) {
   unsigned totalVisit = 0;
   std::cout << "Begin search" << std::endl;
   auto s = std::chrono::high_resolution_clock::now();
+  std::vector<unsigned> flags(max_points_num + 1, 0);
+  mlock(flags.data(), flags.size() * sizeof(unsigned));
+  std::vector<efanna2e::Neighbor> globalRetSet, partRetSet;
   for (size_t i = 0; i < query_num; i++) {
     auto query = query_load + i * dim;
-    std::vector<efanna2e::Neighbor> globalRetSet, partRetSet;
+    globalRetSet.clear();
+    partRetSet.clear();
     for (unsigned partId = 0; partId < nsgNum; ++partId) {
+      flags.back() = i * nsgNum + partId;
       auto& index = *indexVec[partId];
-      index.SearchWithOptGraph(query, paras, partRetSet);
+      index.SearchWithOptGraph(query, paras, flags, partRetSet);
       totalHops += index.getHops();
       totalVisit += index.getVisitNum();
       if (partId == 0) {
@@ -104,7 +113,7 @@ int main(int argc, char** argv) {
   std::cerr << "AVG hop num: " << (float) totalHops / query_num
             << std::endl;
 
-  GroundTruth truth(100);
+  GroundTruth truth(K);
   truth.load(groundTruthPath);
   truth.recallRate(res);
 

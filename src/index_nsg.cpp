@@ -526,17 +526,9 @@ void IndexNSG::Search(const float *query, const float *x, size_t K,
   }
 }
 
-void IndexNSG::SearchWithOptGraph(const float *query, size_t K,
-                                  const Parameters &parameters, unsigned *indices) {
-  std::vector<Neighbor> retset;
-  SearchWithOptGraph(query, parameters, retset);
-  for (size_t i = 0; i < K; i++) {
-    indices[i] = retset[i].id;
-  }
-}
-
 void IndexNSG::SearchWithOptGraph(const float *query,
                                   const Parameters &parameters,
+                                  std::vector<unsigned>& flags,
                                   std::vector<Neighbor>& retset) {
   unsigned L = parameters.Get<unsigned>("L_search");
   DistanceFastL2 *dist_fast = (DistanceFastL2 *)distance_;
@@ -549,7 +541,9 @@ void IndexNSG::SearchWithOptGraph(const float *query,
   // std::mt19937 rng(rand());
   // GenRandom(rng, init_ids.data(), L, (unsigned) nd_);
 
-  boost::dynamic_bitset<> flags{nd_, 0};
+
+  // flags.reset();
+  auto visited = flags.back();
 //  unsigned tmp_l = 0;
 //  unsigned *neighbors = (unsigned *)(opt_graph_ + node_size * ep_ + data_len);
 //  unsigned MaxM_ep = *neighbors;
@@ -557,7 +551,7 @@ void IndexNSG::SearchWithOptGraph(const float *query,
 
   for (unsigned i = 0; i < init_ids.size() ; i++) {
     init_ids[i] = eps_[i];
-    flags[init_ids[i]] = true;
+    flags[init_ids[i]] = visited;
   }
 
 //  while (init_ids.size() < 10) {
@@ -582,7 +576,7 @@ void IndexNSG::SearchWithOptGraph(const float *query,
     x++;
     float dist = dist_fast->compare(x, query, norm_x, (unsigned)dimension_);
     retset.emplace_back(id, dist, true);
-    flags[id] = true;
+    flags[id] = visited;
     ++visitNum;
     poolSize++;
   }
@@ -609,8 +603,8 @@ void IndexNSG::SearchWithOptGraph(const float *query,
         _mm_prefetch(opt_graph_ + node_size * neighbors[m], _MM_HINT_T0);
       for (unsigned m = 0; m < MaxM; ++m) {
         unsigned id = neighbors[m];
-        if (flags[id]) continue;
-        flags[id] = 1;
+        if (flags[id] == visited) continue;
+        flags[id] = visited;
         float *data = (float *)(opt_graph_ + node_size * id);
         float norm = *data;
         data++;
