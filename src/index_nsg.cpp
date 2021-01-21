@@ -9,6 +9,10 @@
 #include "efanna2e/exceptions.h"
 #include "efanna2e/parameters.h"
 
+#include "efanna2e/heap.h"
+#include "efanna2e/priority_queue.h"
+#include <queue>
+
 namespace efanna2e {
 
 const double kPi = 3.14159265358979323846264;
@@ -275,8 +279,8 @@ void IndexNSG::sync_prune(unsigned q, std::vector<Neighbor> &pool,
 
 void IndexNSG::InterInsert(unsigned n, unsigned range,
                            std::vector<std::mutex> &locks,
-                           SimpleNeighbor *cut_graph_) {
-  SimpleNeighbor *src_pool = cut_graph_ + (size_t)n * (size_t)range;
+                           SimpleNeighbor *cut_graph_, SimpleNeighbor *backupGraph) {
+  SimpleNeighbor *src_pool = backupGraph + (size_t)n * (size_t)range;
   for (size_t i = 0; i < range; i++) {
     if (src_pool[i].distance == -1) break;
 
@@ -402,9 +406,11 @@ void IndexNSG::Link(const Parameters &parameters, SimpleNeighbor *cut_graph_) {
   std::cout << "avg candidate num: " << totalPoolSize / nd_ << std::endl;
   std::cout << "first link time: " << diff.count() << "\n";
 
+  SimpleNeighbor *backupGraph = new SimpleNeighbor[nd_ * (size_t)range];
+  std::memcpy(backupGraph, cut_graph_, nd_ * (size_t)range * sizeof(SimpleNeighbor));
 #pragma omp parallel for schedule(dynamic, 100)
   for (unsigned n = 0; n < nd_; ++n) {
-    InterInsert(n, range, locks, cut_graph_);
+    InterInsert(n, range, locks, cut_graph_, backupGraph);
   }
   auto s3 = std::chrono::high_resolution_clock::now();
   diff = s3 - s2;
@@ -623,6 +629,104 @@ void IndexNSG::SearchWithOptGraph(const float *query,
     else
       ++k;
   }
+}
+
+void IndexNSG::SearchWithOptGraph2(const float *query,
+                                   const Parameters &parameters,
+                                   std::vector<unsigned>& flags,
+                                   std::vector<Neighbor>& queueData,
+                                   std::vector<Neighbor>& retset) {
+  unsigned L = parameters.Get<unsigned>("L_search");
+  DistanceFastL2 *dist_fast = (DistanceFastL2 *)distance_;
+  hops = 0;
+  visitNum = 0;
+
+  std::vector<unsigned> init_ids(eps_.size());
+  // std::mt19937 rng(rand());
+  // GenRandom(rng, init_ids.data(), L, (unsigned) nd_);
+
+
+  // flags.reset();
+  auto visited = flags.back();
+//  unsigned tmp_l = 0;
+//  unsigned *neighbors = (unsigned *)(opt_graph_ + node_size * ep_ + data_len);
+//  unsigned MaxM_ep = *neighbors;
+//  neighbors++;
+
+  for (unsigned i = 0; i < init_ids.size() ; i++) {
+    init_ids[i] = eps_[i];
+    flags[init_ids[i]] = visited;
+  }
+
+//  while (init_ids.size() < 10) {
+//    unsigned id = rand() % nd_;
+//    if (flags[id]) continue;
+//    init_ids.push_back(id);
+//    flags[id] = true;
+//  }
+
+
+  for (unsigned i = 0; i < init_ids.size(); i++) {
+    unsigned id = init_ids[i];
+    if (id >= nd_) continue;
+    _mm_prefetch(opt_graph_ + node_size * id, _MM_HINT_T0);
+  }
+
+  float baseline = std::numeric_limits<float>::max();
+  retset.resize(L);
+  Heap<Neighbor> topK(L, retset.data());
+  PriorityQueue<Neighbor, std::greater<Neighbor>, std::vector<Neighbor>> queue(
+    &queueData);
+  for (unsigned i = 0; i < init_ids.size(); i++) {
+    unsigned id = init_ids[i];
+    if (id >= nd_) continue;
+    float *x = (float *)(opt_graph_ + node_size * id);
+    float norm_x = *x;
+    x++;
+    float dist = dist_fast->compare(x, query, norm_x, (unsigned)dimension_);
+    queue.emplace(id, dist, true);
+    flags[id] = visited;
+    ++visitNum;
+  }
+
+  while (!queue.empty()) {
+    auto point = queue.top();
+    queue.pop();
+
+    if (baseline < point.distance) {
+      break;
+    }
+
+    ++hops;
+    unsigned n = point.id;
+    _mm_prefetch(opt_graph_ + node_size * n + data_len, _MM_HINT_T0);
+    unsigned *neighbors = (unsigned *)(opt_graph_ + node_size * n + data_len);
+    unsigned MaxM = *neighbors;
+    neighbors++;
+    for (unsigned m = 0; m < MaxM; ++m)
+      _mm_prefetch(opt_graph_ + node_size * neighbors[m], _MM_HINT_T0);
+    for (unsigned m = 0; m < MaxM; ++m) {
+      unsigned id = neighbors[m];
+      if (flags[id] == visited) continue;
+      flags[id] = visited;
+      float *data = (float *) (opt_graph_ + node_size * id);
+      float norm = *data;
+      data++;
+      float dist = dist_fast->compare(query, data, norm, (unsigned) dimension_);
+      ++visitNum;
+
+      if (topK.emplace(id, dist, true)) {
+        if (topK.size() == L) {
+          baseline = topK.root().distance;
+//          if (!queueData.empty() && queueData.back().distance >= baseline) {
+//            queueData.pop_back();
+//          }
+        }
+        queue.emplace(id, dist, true);
+      }
+    }
+  }
+  topK.sort();
 }
 
 void IndexNSG::OptimizeGraph(float *data) {  // use after build or load

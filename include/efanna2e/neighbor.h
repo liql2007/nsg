@@ -24,6 +24,9 @@ struct Neighbor {
     inline bool operator<(const Neighbor &other) const {
         return distance < other.distance;
     }
+    inline bool operator>(const Neighbor &other) const {
+        return distance > other.distance;
+    }
 };
 
 typedef std::lock_guard<std::mutex> LockGuard;

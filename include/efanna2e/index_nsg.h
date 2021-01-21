@@ -40,6 +40,11 @@ class IndexNSG : public Index {
                           const Parameters &parameters,
                           std::vector<unsigned>& flags,
                           std::vector<Neighbor>& retset);
+  void SearchWithOptGraph2(const float *query,
+                           const Parameters &parameters,
+                           std::vector<unsigned>& flags,
+                           std::vector<Neighbor>& queueData,
+                           std::vector<Neighbor>& retset);
   void OptimizeGraph(float* data);
 
   unsigned getVisitNum() const { return visitNum; }
@@ -88,7 +93,7 @@ class IndexNSG : public Index {
                      std::vector<Neighbor> &pool);
 
     //void add_cnn(unsigned des, Neighbor p, unsigned range, LockGraph& cut_graph_);
-    void InterInsert(unsigned n, unsigned range, std::vector<std::mutex>& locks, SimpleNeighbor* cut_graph_);
+    void InterInsert(unsigned n, unsigned range, std::vector<std::mutex>& locks, SimpleNeighbor* cut_graph_, SimpleNeighbor *backupGraph);
     void sync_prune(unsigned q, std::vector<Neighbor>& pool, const Parameters &parameter, boost::dynamic_bitset<>& flags, SimpleNeighbor* cut_graph_);
     void Link(const Parameters &parameters, SimpleNeighbor* cut_graph_);
     void Load_nn_graph(const char *filename);

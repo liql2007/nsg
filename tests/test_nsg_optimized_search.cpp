@@ -52,6 +52,7 @@ int main(int argc, char** argv) {
   paras.Set<unsigned>("L_search", L);
   paras.Set<unsigned>("P_search", L);
 
+//  while(true) {
   std::vector<std::vector<unsigned> > res(query_num);
   for (unsigned i = 0; i < query_num; i++) res[i].resize(K);
   unsigned totalHops = 0;
@@ -59,15 +60,18 @@ int main(int argc, char** argv) {
   std::cout << "Begin search" << std::endl;
   auto s = std::chrono::high_resolution_clock::now();
   std::vector<efanna2e::Neighbor> retset;
-  std::vector<unsigned>flags(index.getVecNum() + 1, 0);
+  std::vector<efanna2e::Neighbor> queueData;
+  queueData.reserve(L * 2);
+  std::vector<unsigned> flags(index.getVecNum() + 1, 0);
   mlock(flags.data(), flags.size() * sizeof(unsigned));
   for (size_t i = 0; i < query_num; i++) {
     flags.back() = i + 1;
     index.SearchWithOptGraph(query_load + i * dim, paras, flags, retset);
+    // index.SearchWithOptGraph2(query_load + i * dim, paras, flags, queueData, retset);
     totalHops += index.getHops();
     totalVisit += index.getVisitNum();
     for (size_t j = 0; j < K; j++) {
-        res[i][j] = retset[j].id;
+      res[i][j] = retset[j].id;
     }
   }
   auto e = std::chrono::high_resolution_clock::now();
@@ -85,6 +89,7 @@ int main(int argc, char** argv) {
   GroundTruth truth(K);
   truth.load(groundTruthPath);
   truth.recallRate(res);
+  // }
 
   return 0;
 }
