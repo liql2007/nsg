@@ -48,6 +48,11 @@ target_link_libraries(test_sample_data ${PROJECT_NAME} -ltcmalloc)
 target_include_directories(test_sample_data PUBLIC
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>)
 
+# test_compress
+add_executable(test_compress test_compress.cpp)
+target_link_libraries(test_compress ${PROJECT_NAME} compress -ltcmalloc)
+target_include_directories(test_compress PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>)
+
 add_executable(test_nsg_index test_nsg_index.cpp)
 target_link_libraries(test_nsg_index ${PROJECT_NAME} -ltcmalloc)
 

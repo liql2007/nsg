@@ -32,4 +32,5 @@ endif()
 
 add_subdirectory(src)
 add_subdirectory(faiss)
+add_subdirectory(compress)
 add_subdirectory(tests)
