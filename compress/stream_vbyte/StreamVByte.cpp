@@ -16,9 +16,11 @@ namespace compress {
 namespace {
 
 inline uint8_t controlCode(uint32_t val) {
-  assert(val != 0);
   int r;
-  __asm__("bsrl %1,%0" : "=&r" (r) : "rm" (val));
+  // __asm__("bsrl %1,%0" : "=&r" (r) : "rm" (val));
+  __asm__("bsrl %1,%0\n\t"
+          "cmovzl %2,%0"
+  : "=&r" (r) : "rm" (val), "rm" (0));
   return r >> 3;
 }
 
@@ -33,7 +35,7 @@ std::size_t encodeScalar(const uint32_t* in, uint32_t count, uint8_t* out) {
   std::size_t controlBytes = (count + 3) >> 2;
   uint8_t *cp = out;
   uint8_t *dp = out + controlBytes;
-
+  uint32_t preVal = 0;
 #if 0
   uint8_t shift = 0;
   uint8_t key = 0;
@@ -53,20 +55,24 @@ std::size_t encodeScalar(const uint32_t* in, uint32_t count, uint8_t* out) {
 #else
   for (auto end = in + (count & ~3); in != end; in += 4) {
     uint8_t control = 0;
-    control |= encodeInteger(in[0], &dp);
-    control |= encodeInteger(in[1], &dp) << 2;
-    control |= encodeInteger(in[2], &dp) << 4;
-    control |= encodeInteger(in[3], &dp) << 6;
+    control |= encodeInteger(in[0] - preVal, &dp);
+    preVal = in[0];
+    control |= encodeInteger(in[1] - preVal, &dp) << 2;
+    preVal = in[1];
+    control |= encodeInteger(in[2] - preVal, &dp) << 4;
+    preVal = in[2];
+    control |= encodeInteger(in[3] - preVal, &dp) << 6;
+    preVal = in[3];
     *cp++ = control;
   }
   count &= 3;
   if (count > 0) {
-    uint8_t control = encodeInteger(in[0], &dp);
+    uint8_t control = encodeInteger(in[0] - preVal, &dp);
     if (count > 1) {
-      control |= encodeInteger(in[1], &dp) << 2;
+      control |= encodeInteger(in[1] - in[0], &dp) << 2;
     }
     if (count > 2) {
-      control |= encodeInteger(in[2], &dp) << 4;
+      control |= encodeInteger(in[2] - in[1], &dp) << 4;
     }
     *cp = control;
   }
@@ -115,6 +121,7 @@ std::size_t decodeScalar(const uint8_t* in, uint32_t count, uint32_t* out) {
   std::size_t controlBytes = (count + 3) >> 2;
   const uint8_t* cp = in;
   const uint8_t* dp = in + controlBytes;
+  uint32_t val = 0;
 
 #if 0
   uint8_t key = 0;
@@ -128,15 +135,20 @@ std::size_t decodeScalar(const uint8_t* in, uint32_t count, uint32_t* out) {
   auto end = count & (~3);
   for (uint32_t c = 0; c < end; c += 4) {
     uint8_t control = *cp++;
-    *out++ = decodeInteger(&dp, control & 0x3);
-    *out++ = decodeInteger(&dp, (control >> 2) & 0x3);
-    *out++ = decodeInteger(&dp, (control >> 4) & 0x3);
-    *out++ = decodeInteger(&dp, control >> 6);
+    val += decodeInteger(&dp, control & 0x3);
+    *out++ = val;
+    val += decodeInteger(&dp, (control >> 2) & 0x3);
+    *out++ = val;
+    val += decodeInteger(&dp, (control >> 4) & 0x3);
+    *out++ = val;
+    val += decodeInteger(&dp, control >> 6);
+    *out++ = val;
   }
   end = count & 3;
   uint8_t control = *cp;
   for (uint32_t i = 0; i < end; ++i, control >>= 2) {
-    *out++ = decodeInteger(&dp, control & 0x3);
+    val += decodeInteger(&dp, control & 0x3);
+    *out++ = val;
   }
 #endif
 //  if (count > 0) {
@@ -150,19 +162,26 @@ std::size_t decodeScalar(const uint8_t* in, uint32_t count, uint32_t* out) {
 
 
 #ifdef __SSE3__
-std::size_t encodeSSE3(const uint32_t* in, uint32_t count, uint8_t* out) {
+std::size_t encodeSSE(const uint32_t* in, uint32_t count, uint8_t* out) {
   std::size_t controlBytes = (count + 3) >> 2;
   uint8_t *cp = out;
   uint8_t *dp = out + controlBytes;
+  __m128i preVals = _mm_set1_epi32(0);
 
   __m128i mask01 = _mm_set1_epi8(0x01);
   __m128i mask7F00 = _mm_set1_epi16(0x7F00);
 
   for (auto end = in + (count & ~7); in != end; in += 8) {
+    __m128i rawVal;
     __m128i r0, r1, r2, r3;
 
-    r0 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(in));
-    r1 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(in + 4));
+    rawVal = _mm_loadu_si128(reinterpret_cast<const __m128i *>(in));
+    r0 = _mm_sub_epi32(rawVal, _mm_alignr_epi8(rawVal, preVals, 12));
+    preVals = rawVal;
+    rawVal = _mm_loadu_si128(reinterpret_cast<const __m128i *>(in + 4));
+    r1 = _mm_sub_epi32(rawVal, _mm_alignr_epi8(rawVal, preVals, 12));
+    preVals = rawVal;
+
     // integer(4 bytes) -> 2 bytes (significant bit is 0/1 of every byte)
     r2 = _mm_min_epu8(mask01, r0); // 0xXX -> 0x01, 0x00 -> 0x00
     r3 = _mm_min_epu8(mask01, r1);
@@ -190,10 +209,12 @@ std::size_t encodeSSE3(const uint32_t* in, uint32_t count, uint8_t* out) {
     cp += 2;
   }
 
+  uint32_t preVal = _mm_extract_epi32(preVals, 3);
   uint32_t control = 0;
   auto leftCount = count & 7;
   for (uint32_t i = 0; i < leftCount; i++) {
-    uint8_t code = encodeInteger(*in++, &dp);
+    uint8_t code = encodeInteger(*in - preVal, &dp);
+    preVal = *in++;
     control |= code << (i + i);
   }
   std::memcpy(cp, &control, (leftCount + 3) >> 2); // assumes little endian
@@ -217,22 +238,36 @@ std::size_t decodeSSE(const uint8_t* in, uint32_t count, uint32_t* out) {
   std::size_t controlBytes = (count + 3) >> 2;
   const uint8_t* cp = in;
   const uint8_t* dp = in + controlBytes;
+  uint32_t preVal = 0;
 
   auto fullControlBytes = count >> 2;
-  for (uint32_t i = 0; i < fullControlBytes; ++i, out += 4) {
-    auto key = *cp++;
-    __m128i data = _mm_loadu_si128(reinterpret_cast<const __m128i*>(dp));
-    __m128i shuffle = _mm_loadu_si128(reinterpret_cast<const __m128i*>(
-                                        internal::shuffleTable[key]));
-    data = _mm_shuffle_epi8(data, shuffle);
-    _mm_storeu_si128((__m128i*)out, data);
-    dp += internal::lengthTable[key];
+  if (fullControlBytes > 0) {
+    __m128i preVals = _mm_set1_epi32(0);
+    for (uint32_t i = 0; i < fullControlBytes; ++i, out += 4) {
+      auto key = *cp++;
+      __m128i data = _mm_loadu_si128(reinterpret_cast<const __m128i *>(dp));
+      __m128i shuffle = _mm_loadu_si128(reinterpret_cast<const __m128i *>(
+                                          internal::shuffleTable[key]));
+      data = _mm_shuffle_epi8(data, shuffle);
+
+      __m128i add = _mm_slli_si128(data, 4);      // Cycle 1: [- A B C]
+      preVals = _mm_shuffle_epi32(preVals, 0xFF); // Cycle 2: [P P P P]
+      data = _mm_add_epi32(data, add);            // Cycle 2: [A AB BC CD]
+      add = _mm_slli_si128(data, 8);              // Cycle 3: [- - A AB]
+      data = _mm_add_epi32(data, preVals);        // Cycle 3: [PA PAB PBC PCD]
+      data = _mm_add_epi32(data, add);            // Cycle 4: [PA PAB PABC PABCD]
+      preVals = data;
+      _mm_storeu_si128((__m128i *)out, data);
+      dp += internal::lengthTable[key];
+    }
+    preVal = *(out - 1);
   }
 
   count &= 3;
   auto control = *cp;
   for (uint32_t i = 0; i < count; ++i, control >>= 2) {
-    *out++ = decodeInteger(&dp, control & 3);
+    preVal += decodeInteger(&dp, control & 3);
+    *out++ = preVal;
   }
   return dp - in;
 }
@@ -247,22 +282,18 @@ std::size_t StreamVByte::encode(const uint32_t* in, uint32_t count,
   return encodeScalar(in, count, out);
 }
 
-std::size_t StreamVByte::encodeSIMD(const uint32_t* in, uint32_t count,
-                                    uint8_t* out) {
-#ifdef __SSE3__
-  return encodeSSE3(in, count, out);
-#else
-  return 0;
-#endif
-}
-
 std::size_t StreamVByte::decode(const uint8_t* in, uint32_t count,
                                 uint32_t* out) {
   return decodeScalar(in, count, out);
 }
 
-std::size_t StreamVByte::decodeSIMD(const uint8_t* in, uint32_t count,
-                                    uint32_t* out) {
+std::size_t StreamVByteSIMD::encode(const uint32_t* in, uint32_t count,
+                                    uint8_t* out) {
+  return encodeSSE(in, count, out);
+}
+
+std::size_t StreamVByteSIMD::decode(const uint8_t* in, uint32_t count,
+                                        uint32_t* out) {
   return decodeSSE(in, count, out);
 }
 

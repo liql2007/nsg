@@ -11,8 +11,9 @@
 
 using namespace compress;
 
-void genData(std::size_t size, std::size_t maxGroupSize,
-             std::vector<std::uint32_t>* vec, std::vector<std::size_t>* group) {
+void genData(std::size_t size, std::size_t maxGroupSize, bool sort,
+             std::vector<std::uint32_t>* vec,
+             std::vector<std::size_t>* group) {
   vec->resize(size);
   srand(12345);
   for (std::size_t i = 0; i < size; ++i) {
@@ -24,11 +25,23 @@ void genData(std::size_t size, std::size_t maxGroupSize,
       }
     }
   }
+  auto sortGroup = [&vec, sort](std::size_t index, std::size_t count) {
+    if (sort) {
+      std::sort(vec->data() + index, vec->data() + index + count);
+      for (decltype(count) i = index + 1; i < index + count; ++i) {
+        if ((*vec)[i] <= (*vec)[i - 1]) {
+          (*vec)[i] = (*vec)[i - 1] + 1;
+        }
+      }
+    }
+  };
   group->clear();
   std::size_t index = 0;
   group->reserve(3 * size / maxGroupSize);
-  for (int i = 0; i <= 32 && index + i < size; ++i, index += i) {
-    group->push_back(i);
+  for (int count = 0; count <= 32 && index + count < size; ++count) {
+    group->push_back(count);
+    sortGroup(index, count);
+    index += count;
   }
   while (index < size) {
     std::size_t count = std::abs(rand()) % maxGroupSize;
@@ -37,78 +50,77 @@ void genData(std::size_t size, std::size_t maxGroupSize,
     }
     count = std::min(count, size - index);
     group->push_back(count);
+    sortGroup(index, count);
     index += count;
   }
+}
+
+template <typename Compressor>
+void encodeAndDecode(const std::vector<std::uint32_t>& vec,
+                     const std::vector<std::size_t>& group,
+                     std::vector<uint8_t>& encodeBuffer,
+                     std::vector<uint32_t>& decodeBuffer) {
+  std::size_t totalSize = 0;
+  std::size_t index = 0;
+  for (auto count : group) {
+    auto es1 = Compressor::encode(&vec[index], count, encodeBuffer.data());
+    totalSize += es1;
+    auto ds1 = Compressor::decode(encodeBuffer.data(), count,
+                                  decodeBuffer.data());
+    if (ds1 != es1) {
+      printf("[%zu] size mismatch, encode [%zu], decode [%zu]",
+             index, es1, ds1);
+      exit(-1);
+    }
+    for (decltype(count) i = 0; i < count; ++i) {
+      if (vec[index + i] != decodeBuffer[i]) {
+        printf("decode value error: [%zu, %zu], [%u, %u]\n",
+               index, i, vec[index + i], decodeBuffer[i]);
+        exit(-1);
+      }
+    }
+    index += count;
+  }
+  auto oriSize = vec.size() * sizeof(uint32_t);
+  printf("compress rate: %.1f%%\n", 100.0 * totalSize / oriSize);
 }
 
 void testSVB() {
   constexpr std::size_t maxGroupSize = 111;
   std::size_t size = 1024LL * 1024 * 1024;
-  /** cost time:
+  /** cost time(no delta):
    *  encodeSIMD: 1.30, encode:2.11
    *  encodeSIMD + decodeSIMD: 2.09
    *  encodeSIMD + decode: 8.75
+   ** cost time(delta):
+   *  encodeSIMD: 1.53, encode:2.26, compress rate: 56.9%
+   *  encodeSIMD + decodeSIMD: 2.52
+   *  encode + decode: 5.49 (branch predicate better)
    */
   // std::size_t size = 1024LL * 1024;
   std::vector<std::uint32_t> vec;
   std::vector<std::size_t> group;
-  genData(size, maxGroupSize, &vec, &group);
+  genData(size, maxGroupSize, true, &vec, &group);
 
-  std::size_t index = 0;
   auto encodeBuffSize = StreamVByte::maxCompressedBytes(maxGroupSize);
-  std::vector<uint8_t> encodeBuffer1(encodeBuffSize);
-  std::vector<uint32_t> decodeBuffer1(maxGroupSize);
+  std::vector<uint8_t> encodeBuffer(encodeBuffSize);
+  std::vector<uint32_t> decodeBuffer(maxGroupSize);
 
 #if 1
-  std::vector<uint8_t> encodeBuffer2(encodeBuffSize);
-  std::vector<uint32_t> decodeBuffer2(maxGroupSize);
-
-  for (auto count : group) { // warn up & test accuracy
-    auto es1 = StreamVByte::encode(&vec[index], count, encodeBuffer1.data());
-    auto es2 = StreamVByte::encodeSIMD(&vec[index], count, encodeBuffer2.data());
-    auto ds1 = StreamVByte::decode(encodeBuffer1.data(), count,
-                                   decodeBuffer1.data());
-    auto ds2 = StreamVByte::decodeSIMD(encodeBuffer2.data(), count,
-                                       decodeBuffer2.data());
-    if (ds1 != es1 || es2 != es1 || ds2 != ds1) {
-      printf("[%zu] size mismatch, encode [%zu:%zu], decode [%zu:%zu]",
-             index, es1, es2, ds1, ds2);
-      exit(-1);
-    }
-    for (decltype(count) i = 0; i < count; ++i) {
-      if (vec[index + i] != decodeBuffer1[i]) {
-        printf("decode value error: [%zu, %zu], [%u, %u]\n",
-               index + i, i, vec[index + i], decodeBuffer1[i]);
-        exit(-1);
-      }
-    }
-    for (decltype(es1) i = 0; i < es1; ++i) {
-      if (encodeBuffer1[i] != encodeBuffer2[i]) {
-        printf("new encoded [%zu:%zu] value error, [%u, %u]",
-               index, i, encodeBuffer1[i], encodeBuffer2[i]);
-        exit(-1);
-      }
-    }
-    for (std::size_t i = 0; i < count; ++i) {
-      if (decodeBuffer1[i] != decodeBuffer2[i]) {
-        printf("new decoded [%zu:%zu] value error, [%u, %u]",
-               index, i, decodeBuffer1[i], decodeBuffer2[i]);
-        exit(-1);
-      }
-    }
-    index += count;
-  }
+  printf("scalar encode and decode:\n");
+  encodeAndDecode<StreamVByte>(vec, group,encodeBuffer, decodeBuffer);
+  printf("vector encode and decode:\n");
+  encodeAndDecode<StreamVByteSIMD>(vec, group,encodeBuffer, decodeBuffer);
 #endif
 
+  using SVB = StreamVByte;
   uint32_t runTimes = 4;
   for (uint32_t i = 0; i < runTimes; ++i) {
     auto bb = std::chrono::high_resolution_clock::now();
-    index = 0;
+    std::size_t index = 0;
     for (auto count : group) {
-      StreamVByte::encodeSIMD(&vec[index], count, encodeBuffer1.data());
-      // StreamVByte::encode(&vec[index], count, encodeBuffer1.data());
-      StreamVByte::decodeSIMD(encodeBuffer1.data(), count, decodeBuffer1.data());
-      // StreamVByte::decode(encodeBuffer1.data(), count, decodeBuffer1.data());
+      SVB::encode(&vec[index], count, encodeBuffer.data());
+      SVB::decode(encodeBuffer.data(), count, decodeBuffer.data());
       index += count;
     }
     auto ee = std::chrono::high_resolution_clock::now();
