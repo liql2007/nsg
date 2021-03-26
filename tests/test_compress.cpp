@@ -94,8 +94,8 @@ void testSVB() {
    *  encodeSIMD + decode: 8.75
    ** cost time(delta):
    *  encodeSIMD: 1.53, encode:2.26, compress rate: 56.9%
-   *  encodeSIMD + decodeSIMD: 2.52
-   *  encode + decode: 5.49 (branch predicate better)
+   *  encodeSIMD + decodeSIMD: 2.42
+   *  encode + decode: 5.68 (branch predicate better)
    */
   // std::size_t size = 1024LL * 1024;
   std::vector<std::uint32_t> vec;
@@ -113,7 +113,8 @@ void testSVB() {
   encodeAndDecode<StreamVByteSIMD>(vec, group,encodeBuffer, decodeBuffer);
 #endif
 
-  using SVB = StreamVByte;
+  // using SVB = StreamVByte;
+  using SVB = StreamVByteSIMD;
   uint32_t runTimes = 4;
   for (uint32_t i = 0; i < runTimes; ++i) {
     auto bb = std::chrono::high_resolution_clock::now();

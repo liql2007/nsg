@@ -12,6 +12,7 @@
 #include "efanna2e/heap.h"
 #include "efanna2e/priority_queue.h"
 #include <queue>
+#include <compress/reordering/Reordering.h>
 
 namespace efanna2e {
 
@@ -77,6 +78,24 @@ void IndexNSG::Load(const char *filename) {
   std::cerr << "Average Degree = " << avgDegree_
             << ",  Width:" << width << std::endl;
 }
+
+bool IndexNSG::ReorderGraph(uint8_t* vecs, std::vector<uint32_t>* mapping) {
+  auto s1 = std::chrono::high_resolution_clock::now();
+  if (!compress::Reordering::genReorderMapping(final_graph_, mapping)) {
+    std::cerr << "get reorder mapping failed" << std::endl;
+    return false;
+  }
+  auto s2 = std::chrono::high_resolution_clock::now();
+  compress::Reordering::reorder(dimension_ * sizeof(float), *mapping,
+                                &final_graph_, &eps_, vecs);
+  auto s3 = std::chrono::high_resolution_clock::now();
+
+  std::chrono::duration<double> diff1 = s2 - s1, diff2 = s3 - s2;
+  std::cout << "compute reorder mapping time: " << diff1.count() << "\n";
+  std::cout << "reorder graph time: " << diff2.count() << "\n";
+  return true;
+}
+
 void IndexNSG::Load_nn_graph(const char *filename) {
   std::ifstream in(filename, std::ios::binary);
   unsigned k;
@@ -532,6 +551,7 @@ void IndexNSG::Search(const float *query, const float *x, size_t K,
   }
 }
 
+#if 0
 void IndexNSG::SearchWithOptGraph(const float *query,
                                   const Parameters &parameters,
                                   std::vector<unsigned>& flags,
@@ -630,6 +650,7 @@ void IndexNSG::SearchWithOptGraph(const float *query,
       ++k;
   }
 }
+#endif
 
 void IndexNSG::SearchWithOptGraph2(const float *query,
                                    const Parameters &parameters,
@@ -729,6 +750,7 @@ void IndexNSG::SearchWithOptGraph2(const float *query,
   topK.sort();
 }
 
+#if 0
 void IndexNSG::OptimizeGraph(float *data) {  // use after build or load
 
   data_ = data;
@@ -753,6 +775,7 @@ void IndexNSG::OptimizeGraph(float *data) {  // use after build or load
   }
   CompactGraph().swap(final_graph_);
 }
+#endif
 
 void IndexNSG::DFS(boost::dynamic_bitset<> &flag, unsigned root, unsigned &cnt) {
   unsigned tmp = root;

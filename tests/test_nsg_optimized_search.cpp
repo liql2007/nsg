@@ -5,6 +5,7 @@
 #include <efanna2e/index_nsg.h>
 #include <efanna2e/util.h>
 #include <efanna2e/test_helper.h>
+#include <compress/stream_vbyte/StreamVByte.h>
 #include <sys/mman.h>
 #include <chrono>
 #include <string>
@@ -45,7 +46,20 @@ int main(int argc, char** argv) {
   // query_num, query_dim);
   efanna2e::IndexNSG index(dim, points_num, efanna2e::FAST_L2, nullptr);
   index.Load(nsgPath);
-  index.OptimizeGraph(data_load);
+
+#define PT 1
+#if PT == 1
+  printf("[StreamVByteSIMD] compress\n");
+  using Packer = efanna2e::NeighborsPacker<compress::StreamVByteSIMD>;
+#elif PT == 2
+  printf("[StreamVByte] compress\n");
+  using Packer = efanna2e::NeighborsPacker<compress::StreamVByte>;
+#else
+  printf("[None] compress\n");
+  using Packer = efanna2e::NeighborsPacker<void>;
+#endif
+  Packer packer;
+  index.OptimizeGraph(data_load, packer);
   delete[] data_load;
 
   efanna2e::Parameters paras;
@@ -66,7 +80,9 @@ int main(int argc, char** argv) {
   mlock(flags.data(), flags.size() * sizeof(unsigned));
   for (size_t i = 0; i < query_num; i++) {
     flags.back() = i + 1;
-    index.SearchWithOptGraph(query_load + i * dim, paras, flags, retset);
+    // index.SearchWithOptGraph(query_load + i * dim, paras, flags, retset);
+    index.SearchWithOptGraph(query_load + i * dim, paras, flags,
+                             retset, packer);
     // index.SearchWithOptGraph2(query_load + i * dim, paras, flags, queueData, retset);
     totalHops += index.getHops();
     totalVisit += index.getVisitNum();

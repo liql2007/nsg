@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.1)
 
 project(efanna2e)
-include_directories(${PROJECT_SOURCE_DIR}/include)
+include_directories(${PROJECT_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR})
 
 # Boost
 set(BOOST_ROOT ${PROJECT_SOURCE_DIR}/../_external/usr/local/)
@@ -24,7 +24,7 @@ else()
     message(FATAL_ERROR "no OpenMP supprot")
 endif()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
-add_definitions (-std=c++11 -O3 -lboost -march=native -Wall)
+add_definitions (-std=c++11 -O3 -lboost -DNDEBUG -march=native -Wall)
 # add_definitions (-std=c++11 -O0 -g -lboost -march=native -Wall)
 option(SSG "" OFF)
 if (SSG)
